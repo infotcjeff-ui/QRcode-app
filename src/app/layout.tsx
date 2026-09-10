@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { BottomNav } from "@/components/ui/bottom-nav";
 
 export const metadata: Metadata = {
   title: "校巴安全打卡系統 | School Bus Check-in",
@@ -24,13 +25,12 @@ export default function RootLayout({
     <html lang="zh-HK" suppressHydrationWarning>
       <body className="min-h-screen w-screen bg-slate-50 font-sans antialiased">
         <Toaster>
-          {/*
-            全局容器：使用 min-h 取代 h-screen，讓頁面依內容高度自然延長。
-            每頁自行決定自身高度 / 滾動行為，並使用 .scrollbar-inset (inset 風格)。
-          */}
+          {/* 全局容器：使用 min-h 取代 h-screen，每頁自行決定自身滾動行為。 */}
           <div className="flex min-h-screen w-full flex-col safe-top safe-bottom">
             {children}
           </div>
+          {/* 底部 Liquid Glass 浮動導覽列 (在 /lock 與 /login 自動隱藏) */}
+          <BottomNav />
         </Toaster>
       </body>
     </html>

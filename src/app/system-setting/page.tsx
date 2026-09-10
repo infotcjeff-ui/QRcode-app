@@ -4,9 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BackButton } from "@/components/ui/back-button";
-import { BusesManagementClient } from "@/components/admin/buses-management-client";
-import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
-import type { Bus as BusType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -32,12 +29,12 @@ const ROLES: RoleLink[] = [
     tone: "default",
   },
   {
-    href: "/system-setting/admin/statistics",
-    title: "統計表",
-    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表。",
-    icon: <BarChart3 className="h-8 w-8" />,
-    badge: "Reports",
-    tone: "success",
+    href: "/system-setting/admin/buses",
+    title: "校巴資料管理",
+    description: "新增 / 修改 / 刪除校巴車牌、路線與載客量，並同步寫入 Supabase。",
+    icon: <Bus className="h-8 w-8" />,
+    badge: "Buses",
+    tone: "warning",
   },
   {
     href: "/system-setting/admin/students",
@@ -54,6 +51,14 @@ const ROLES: RoleLink[] = [
     icon: <QrCode className="h-8 w-8" />,
     badge: "Print",
     tone: "warning",
+  },
+  {
+    href: "/system-setting/admin/statistics",
+    title: "統計表",
+    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表。",
+    icon: <BarChart3 className="h-8 w-8" />,
+    badge: "Reports",
+    tone: "success",
   },
   {
     href: "/scan",
@@ -73,27 +78,11 @@ const ROLES: RoleLink[] = [
   },
 ];
 
-async function loadBuses(): Promise<BusType[]> {
-  if (!isSupabaseAdminConfigured()) return [];
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return [];
-  try {
-    const { data } = await supabase
-      .from("buses")
-      .select("id, plate_number, route_name, capacity")
-      .order("route_name", { ascending: true });
-    return (data as BusType[] | null) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-export default async function SystemSettingPage() {
-  const buses = await loadBuses();
+export default function SystemSettingPage() {
   return (
     <main className="flex w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8 scrollbar-inset">
       <header className="flex items-center justify-center gap-2 sm:justify-between">
-        <BackButton parent="/login" fallback="/login" className="hidden sm:inline-flex" />
+        <BackButton parent="/profile" fallback="/profile" className="hidden sm:inline-flex" />
         <div className="flex items-center gap-2">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
             <Bus className="h-5 w-5" />
@@ -128,7 +117,7 @@ export default async function SystemSettingPage() {
               <CardContent>
                 <Button asChild className="w-full">
                   <Link href={role.href}>
-                    進入測試
+                    進入
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
@@ -138,12 +127,10 @@ export default async function SystemSettingPage() {
         </div>
       </section>
 
-      <BusesManagementClient initialBuses={buses} />
-
       <footer className="mt-auto rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">
         <p>
-          <Link href="/scan" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
-            <ArrowLeft className="h-3 w-3" /> 回到 QR Code 打卡主頁
+          <Link href="/profile" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+            <ArrowLeft className="h-3 w-3" /> 前往個人資料頁
           </Link>
         </p>
       </footer>
