@@ -152,19 +152,16 @@ export default function ProfilePage() {
             type="button"
             variant="outline"
             size="lg"
-            className="h-14 w-full justify-between border-red-300 bg-red-50 px-5 text-base text-red-700 hover:bg-red-100"
+            className="h-14 w-full justify-center gap-3 border-red-300 bg-red-50 px-5 text-base text-red-700 hover:bg-red-100"
             onClick={handleLogout}
             disabled={submitting}
           >
-            <span className="flex items-center gap-3">
-              {submitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <LogOut className="h-5 w-5" />
-              )}
-              登出
-            </span>
-            <span className="text-xs text-red-400">返回網站密碼</span>
+            {submitting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <LogOut className="h-5 w-5" />
+            )}
+            登出
           </Button>
         </div>
 
