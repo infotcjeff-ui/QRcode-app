@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, QrCode, Settings, User } from "lucide-react";
+import { Home, QrCode, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAuthUser } from "@/lib/auth";
 
@@ -18,8 +18,9 @@ type Item = {
 const ITEMS: Item[] = [
   { href: "/", label: "主頁", icon: Home },
   { href: "/scan", label: "打卡", icon: QrCode },
-  { href: "/profile", label: "個人", icon: User, authRequired: true },
-  { href: "/system-setting", label: "設定", icon: Settings, authRequired: true },
+  // 「設定」入口只到 /profile，要進入「系統設定」(/system-setting)
+  // 必須從 /profile 上的「系統設定」按鈕點入，避免使用者直接從主畫面跳過個人中心。
+  { href: "/profile", label: "設定", icon: Settings, authRequired: true },
 ];
 
 /**

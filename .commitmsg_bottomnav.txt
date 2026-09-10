@@ -1,0 +1,7 @@
+Feat: bottom nav now shows only 3 items
+
+- Removed "個人" item from the bottom navigation (was redundant)
+- Bottom menu now shows only: 主頁 / 打卡 / 設定
+- "設定" item points to /profile instead of /system-setting
+- The only way to enter /system-setting is via the "系統設定"
+  button on /profile (admin only)
