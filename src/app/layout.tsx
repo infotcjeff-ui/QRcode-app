@@ -23,10 +23,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-HK" suppressHydrationWarning>
-      <body className="min-h-screen w-screen bg-slate-50 font-sans antialiased">
+      <body className="min-h-svh w-screen bg-slate-50 font-sans antialiased">
         <Toaster>
-          {/* 全局容器：使用 min-h 取代 h-screen，每頁自行決定自身滾動行為。 */}
-          <div className="flex min-h-screen w-full flex-col safe-top safe-bottom">
+          {/* 全局容器：使用 min-h-svh 兼顧手機 PWA 與桌面瀏覽器，讓子元素的
+              `h-full` 能透過 100% 解析到實際高度。 */}
+          <div className="flex min-h-svh w-full flex-col safe-top safe-bottom">
             {children}
           </div>
           {/* 底部 Liquid Glass 浮動導覽列 (在 /lock 與 /login 自動隱藏) */}

@@ -71,12 +71,10 @@ function LoginPageContent() {
       });
 
       const next = searchParams.get("next");
-      const dest =
-        next && next.startsWith("/")
-          ? next
-          : json.user.role === "admin"
-          ? "/system-setting"
-          : "/scan";
+      // 預設登入後進入主頁 (/)，與產品設計一致：
+      //   - admin 與 attendant 都先看到主頁，再自行切換功能。
+      //   - 若 query 提供 `next=/xxx` 且為站內相對路徑，則尊重原意。
+      const dest = next && next.startsWith("/") ? next : "/";
       router.replace(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "網絡錯誤，請稍後再試。");
@@ -86,7 +84,7 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
+    <main className="relative flex h-svh w-full flex-col items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg">
