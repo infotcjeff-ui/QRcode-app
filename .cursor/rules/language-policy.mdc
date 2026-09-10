@@ -1,0 +1,33 @@
+---
+description: Language requirement - Traditional Chinese and English only
+alwaysApply: true
+---
+
+# Language Requirement
+
+## IMPORTANT: Response Language Policy
+
+This rule applies to ALL conversations without exception.
+
+### Rules
+
+1. **ONLY use Traditional Chinese (繁體中文) and English** in all responses
+2. **NEVER use Simplified Chinese (簡體中文)** - not in code comments, not in documentation, not anywhere
+3. If including Chinese text in code comments or documentation, it MUST be Traditional Chinese
+
+### Examples
+
+```
+❌ BAD: 欢迎使用 (Simplified)
+✅ GOOD: 歡迎使用 (Traditional)
+
+❌ BAD: 学校 (Simplified)
+✅ GOOD: 學校 (Traditional)
+
+❌ BAD: 家长 (Simplified)
+✅ GOOD: 家長 (Traditional)
+```
+
+### Verification
+
+Before responding, ensure all Chinese characters are Traditional Chinese. If uncertain, use the English equivalent instead.
