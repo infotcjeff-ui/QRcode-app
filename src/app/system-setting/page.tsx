@@ -62,10 +62,10 @@ const ROLES: RoleLink[] = [
   },
   {
     href: "/scan",
-    title: "流動打卡",
+    title: "打卡系統",
     description: "Mobile-first 介面，使用後置鏡頭掃描學生 QR Code，即時上傳打卡紀錄。",
     icon: <Bus className="h-8 w-8" />,
-    badge: "Nanny",
+    badge: "Scan",
     tone: "warning",
   },
   {
