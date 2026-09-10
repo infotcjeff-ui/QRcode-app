@@ -69,16 +69,16 @@ export function isAdmin(user: AuthUser | null): boolean {
   return !!user && user.role === "admin";
 }
 
-export function isNanny(user: AuthUser | null): boolean {
-  return !!user && user.role === "nanny";
+export function isAttendant(user: AuthUser | null): boolean {
+  return !!user && user.role === "attendant";
 }
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "系統管理員",
-  nanny: "保姆",
+  attendant: "打卡員",
 };
 
 export const ROLE_DESCRIPTION: Record<UserRole, string> = {
   admin: "管理學生、列印 QR Code、查看全校即時狀態。",
-  nanny: "使用手機鏡頭掃描學生 QR Code 完成上下車打卡。",
+  attendant: "使用手機鏡頭掃描學生 QR Code 完成上下車打卡。",
 };

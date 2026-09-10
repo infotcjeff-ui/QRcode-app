@@ -68,7 +68,7 @@ export default async function StudentParentPage({ params }: Props) {
   const initialCheckLog = initial.logs[0] ?? null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-slate-50 px-4 py-6">
+    <main className="flex h-full w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6">
       <header className="flex items-center justify-between">
         <Button asChild variant="ghost" size="sm">
           <Link href="/">

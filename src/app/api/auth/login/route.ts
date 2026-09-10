@@ -21,13 +21,13 @@ function bad(error: string, status = 400) {
 /** 示範模式測試帳號密碼。 */
 const DEMO_PASSWORDS: Record<UserRole, string> = {
   admin: "admin",
-  nanny: "test",
+  attendant: "test",
 };
 
 /** 示範模式用戶資料。 */
 const DEMO_USERS: Record<UserRole, { id: string; name: string }> = {
   admin: { id: "11111111-1111-1111-1111-111111111111", name: "陳大文主管" },
-  nanny: { id: "22222222-2222-2222-2222-222222222222", name: "張翠蘭姐" },
+  attendant: { id: "22222222-2222-2222-2222-222222222222", name: "張翠蘭姐" },
 };
 
 /**
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   const role = body.role as UserRole | undefined;
   const password = (body.password ?? "").trim();
 
-  if (!role || (role !== "admin" && role !== "nanny")) {
+  if (!role || (role !== "admin" && role !== "attendant")) {
     return bad("無效的角色。");
   }
   if (!password) return bad("請輸入密碼。");

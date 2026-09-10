@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Bus, GraduationCap, QrCode, ShieldCheck, Smartphone, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, Bus, GraduationCap, QrCode, ShieldCheck, Smartphone, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,14 @@ const ROLES: RoleLink[] = [
     tone: "default",
   },
   {
+    href: "/system-setting/admin/statistics",
+    title: "統計表",
+    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表，並可一鍵生成新報表。",
+    icon: <BarChart3 className="h-8 w-8" />,
+    badge: "Reports",
+    tone: "success",
+  },
+  {
     href: "/system-setting/admin/students",
     title: "學生管理",
     description: "新增 / 刪除學生資料，產生 QR Code，取得家長追蹤連結。",
@@ -46,7 +54,7 @@ const ROLES: RoleLink[] = [
   },
   {
     href: "/scan",
-    title: "保姆流動打卡",
+    title: "流動打卡",
     description: "Mobile-first 介面，使用後置鏡頭掃描學生 QR Code，即時上傳打卡紀錄。",
     icon: <Bus className="h-8 w-8" />,
     badge: "Nanny",
@@ -64,26 +72,14 @@ const ROLES: RoleLink[] = [
 
 export default function SystemSettingPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-3 text-center sm:text-left">
-        <div className="flex items-center justify-center gap-2 sm:justify-start">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
-            <Bus className="h-5 w-5" />
-          </span>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            系統設定 · System Setting
-          </h1>
-        </div>
-        <p className="text-base text-slate-600 sm:text-lg">
-          School Bus Check-in &amp; Parent Tracking · Mobile-first · Realtime
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="default">Next.js 14</Badge>
-          <Badge variant="secondary">TypeScript</Badge>
-          <Badge variant="secondary">Tailwind CSS</Badge>
-          <Badge variant="secondary">shadcn/ui</Badge>
-          <Badge variant="success">Supabase</Badge>
-        </div>
+    <main className="flex h-full w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8">
+      <header className="flex items-center justify-center gap-2 sm:justify-start">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
+          <Bus className="h-5 w-5" />
+        </span>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+          系統設定
+        </h1>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import type {
   Bus,
   CheckLog,
@@ -13,14 +13,12 @@ import type {
   User,
 } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -39,17 +37,16 @@ import {
   Map as MapIcon,
   RefreshCw,
   Clock,
-  ListChecks,
   Compass,
 } from "lucide-react";
-import { QrScanner } from "@/components/nanny/qr-scanner";
+import { QrScanner } from "@/components/scan/qr-scanner";
 import { useToast } from "@/components/ui/toast-context";
 import { isValidUuid } from "@/lib/utils";
-import { getAuthUser, ROLE_LABEL } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { useGeolocation } from "@/lib/use-geolocation";
 
 type Props = {
-  nanny: User;
+  attendant: User;
   trip: Trip;
   bus: Bus;
   initialStudents: Student[];
@@ -65,8 +62,8 @@ type PendingScan = {
 const DEFAULT_PICKUP = "沙田A線 · 首站";
 const DEFAULT_DROPOFF = "學校";
 
-export function NannyDashboardClient({
-  nanny,
+export function ScanDashboardClient({
+  attendant,
   trip,
   bus,
   initialStudents,
@@ -77,38 +74,30 @@ export function NannyDashboardClient({
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [logs, setLogs] = useState<CheckLogWithStudent[]>(initialLogs);
-  const [tab, setTab] = useState<CheckLogType>("ON");
+  const [mainTab, setMainTab] = useState<"scan" | "info">("scan");
+  const [scanTab, setScanTab] = useState<CheckLogType>("ON");
   const [submitting, setSubmitting] = useState(false);
   const [tabSwitching, setTabSwitching] = useState(false);
   const [isInsecureContext, setIsInsecureContext] = useState(false);
   const [pickupPoint, setPickupPoint] = useState<string>(DEFAULT_PICKUP);
   const [dropoffPoint, setDropoffPoint] = useState<string>(DEFAULT_DROPOFF);
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [authUser, setAuthUser] = useState<ReturnType<typeof getAuthUser>>(null);
 
   const geo = useGeolocation({ watchIntervalMs: 30000 });
 
-  // 確保使用者已登入。
+  // 確保使用者已登入（所有已登入的使用者皆可使用掃描功能）。
   useEffect(() => {
     const u = getAuthUser();
     setAuthUser(u);
     setAuthChecked(true);
     if (!u) {
-      router.replace("/login?role=nanny");
+      router.replace("/login?role=attendant");
       return;
     }
-    if (u.role !== "nanny") {
-      toast({
-        title: "身份不符",
-        description: "此頁面僅供保姆使用。",
-        variant: "destructive",
-        duration: 4000,
-      });
-      router.replace("/login");
-    }
-  }, [router, toast]);
+    // 不再限制角色，所有已登入使用者皆可進入。
+  }, [router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -124,8 +113,8 @@ export function NannyDashboardClient({
   }, [students]);
 
   const logsForType = useMemo(
-    () => logs.filter((l) => l.type === tab).sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-    [logs, tab]
+    () => logs.filter((l) => l.type === scanTab).sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+    [logs, scanTab]
   );
 
   const recentLocations = useMemo(() => {
@@ -143,7 +132,7 @@ export function NannyDashboardClient({
   useEffect(() => {
     if (!supabaseConfigured) return;
     const channel = supabase
-      .channel(`nanny-dashboard-${trip.id}`)
+      .channel(`scan-dashboard-${trip.id}`)
       .on(
         "postgres_changes",
         {
@@ -192,7 +181,7 @@ export function NannyDashboardClient({
         body: JSON.stringify({
           student_id: pendingScan.studentId,
           trip_id: trip.id,
-          type: tab,
+          type: scanTab,
           location_name: pickupPoint,
         }),
       });
@@ -233,7 +222,7 @@ export function NannyDashboardClient({
       });
 
       toast({
-        title: tab === "ON" ? "✅ 上車打卡成功" : "✅ 落車打卡成功",
+        title: scanTab === "ON" ? "✅ 上車打卡成功" : "✅ 落車打卡成功",
         description: `${student.name} 已完成打卡`,
         duration: 3500,
       });
@@ -249,7 +238,7 @@ export function NannyDashboardClient({
     } finally {
       setSubmitting(false);
     }
-  }, [pendingScan, submitting, tab, trip.id, pickupPoint, toast]);
+  }, [pendingScan, submitting, scanTab, trip.id, pickupPoint, toast]);
 
   const handleScan = useCallback(
     (decodedText: string) => {
@@ -277,7 +266,7 @@ export function NannyDashboardClient({
       const existingOn = logs.find((l) => l.student_id === decodedText && l.type === "ON");
       const existingOff = logs.find((l) => l.student_id === decodedText && l.type === "OFF");
 
-      if (tab === "ON" && existingOn) {
+      if (scanTab === "ON" && existingOn) {
         toast({
           title: "已上車打卡",
           description: `${student.name} 已於本班次完成上車打卡，請勿重複掃瞄。`,
@@ -286,7 +275,7 @@ export function NannyDashboardClient({
         });
         return;
       }
-      if (tab === "OFF") {
+      if (scanTab === "OFF") {
         if (existingOff) {
           toast({
             title: "已落車打卡",
@@ -309,7 +298,7 @@ export function NannyDashboardClient({
 
       setPendingScan({ studentId: decodedText, student });
     },
-    [studentsById, logs, tab, toast]
+    [studentsById, logs, scanTab, toast]
   );
 
   const totalOn = logs.filter((l) => l.type === "ON").length;
@@ -317,14 +306,14 @@ export function NannyDashboardClient({
 
   if (!authChecked) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50">
+      <main className="flex h-full w-full items-center justify-center bg-slate-50">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-3 bg-slate-50 px-3 py-4 sm:px-4">
+    <main className="flex h-full w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -367,7 +356,7 @@ export function NannyDashboardClient({
             <div className="flex items-center gap-2 text-slate-600">
               <CheckCircle className="h-4 w-4 text-slate-400" />
               <span className="text-xs font-medium">
-                動作：{tab === "ON" ? "上車打卡" : "落車打卡"}
+                動作：{scanTab === "ON" ? "上車打卡" : "落車打卡"}
               </span>
             </div>
           </div>
@@ -403,254 +392,231 @@ export function NannyDashboardClient({
         </DialogContent>
       </Dialog>
 
-      {/* ── Trip Info / Popup Dialog (top-right button) ── */}
-      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-xl p-0">
-          <DialogHeader className="sticky top-0 z-10 border-b bg-white px-4 pb-3 pt-4">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <ListChecks className="h-4 w-4 text-emerald-600" /> 本班次資訊
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {bus.plate_number} · {bus.route_name} ·{" "}
-              {trip.type === "AM_GO" ? "上午上學" : "下午放學"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 p-4">
-            {/* ── 即時 Google Map ── */}
-            <Section
-              icon={<MapIcon className="h-4 w-4 text-emerald-600" />}
-              title="即時 Google Map 位置"
-            >
-              <div className="overflow-hidden rounded-lg border border-slate-200">
-                {geo.lat !== null && geo.lng !== null ? (
-                  <iframe
-                    title="realtime-map"
-                    src={`https://maps.google.com/maps?q=${geo.lat},${geo.lng}&z=16&output=embed`}
-                    className="h-56 w-full"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                ) : (
-                  <div className="flex h-56 flex-col items-center justify-center gap-1 bg-slate-50 text-xs text-slate-400">
-                    <Compass className="h-6 w-6 animate-pulse text-slate-300" />
-                    {geo.error ? `無法取得位置：${geo.error}` : "取得 GPS 中…"}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
-                <span>
-                  {geo.lat !== null && geo.lng !== null
-                    ? `經緯度：${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}${
-                        geo.accuracy ? ` (±${Math.round(geo.accuracy)}m)` : ""
-                      }`
-                    : "尚未取得定位"}
-                </span>
-                <button
-                  onClick={() => geo.refresh()}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] hover:bg-slate-50"
-                >
-                  <RefreshCw className="h-3 w-3" /> 重新定位
-                </button>
-              </div>
-            </Section>
-
-            {/* ── 本班次資訊 ── */}
-            <Section
-              icon={<Info className="h-4 w-4 text-sky-600" />}
-              title="本班次資訊"
-            >
-              <div className="space-y-1 rounded-lg border border-slate-200 bg-white p-3 text-xs">
-                <InfoRow icon={<RouteIcon className="h-3 w-3" />} label="班次 ID" value={`${trip.id.slice(0, 8)}…`} />
-                <InfoRow icon={<BusIcon className="h-3 w-3" />} label="車牌 / 路線" value={`${bus.plate_number} · ${bus.route_name}`} />
-                <InfoRow icon={<Clock className="h-3 w-3" />} label="日期" value={trip.date} />
-                <InfoRow icon={<RouteIcon className="h-3 w-3" />} label="班次類型" value={trip.type === "AM_GO" ? "上午上學" : "下午放學"} />
-                <InfoRow icon={<Radio className="h-3 w-3" />} label="狀態" value={trip.status === "active" ? "進行中" : "已完成"} />
-                <InfoRow icon={<Users className="h-3 w-3" />} label="保姆" value={authUser?.name ?? nanny.name} />
-              </div>
-            </Section>
-
-            {/* ── 上落車點 ── */}
-            <Section
-              icon={<MapPin className="h-4 w-4 text-amber-600" />}
-              title="上落車點"
-            >
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-                <div>
-                  <label className="mb-1 block text-[10px] font-medium text-slate-500">
-                    上車地點 (預設寫入每筆打卡)
-                  </label>
-                  <input
-                    value={pickupPoint}
-                    onChange={(e) => setPickupPoint(e.target.value)}
-                    placeholder="例如：沙田A線 · 首站"
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[10px] font-medium text-slate-500">
-                    落車地點 (顯示於家長通知)
-                  </label>
-                  <input
-                    value={dropoffPoint}
-                    onChange={(e) => setDropoffPoint(e.target.value)}
-                    placeholder="例如：學校"
-                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
-                {recentLocations.length > 0 ? (
-                  <div>
-                    <p className="mb-1 mt-1 text-[10px] font-medium text-slate-500">
-                      最近打卡地點
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {recentLocations.map((loc) => (
-                        <button
-                          key={loc.name}
-                          onClick={() => setPickupPoint(loc.name)}
-                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600 transition-colors hover:bg-slate-100"
-                        >
-                          <MapPin className="h-2.5 w-2.5" /> {loc.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </Section>
-
-            {/* ── 已完成上車掃瞄 ── */}
-            <Section
-              icon={<CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-              title={`已完成上車掃瞄 (${totalOn}/${students.length})`}
-            >
-              {logs.filter((l) => l.type === "ON").length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
-                  尚未有學生上車
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {logs
-                    .filter((l) => l.type === "ON")
-                    .map((log) => (
-                      <StudentRow
-                        key={log.id}
-                        student={log.student}
-                        location={log.location_name}
-                        variant="success"
-                      />
-                    ))}
-                </div>
-              )}
-            </Section>
-
-            {/* ── 未上車學生 ── */}
-            <Section
-              icon={<XCircle className="h-4 w-4 text-amber-600" />}
-              title={`未上車學生 (${students.length - totalOn})`}
-            >
-              {(() => {
-                const boardedSet = new Set(
-                  logs.filter((l) => l.type === "ON").map((l) => l.student_id)
-                );
-                const missing = students.filter((s) => !boardedSet.has(s.id));
-                if (missing.length === 0) {
-                  return (
-                    <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-center text-xs text-emerald-700">
-                      🎉 全體同學已完成上車打卡
-                    </div>
-                  );
-                }
-                return (
-                  <div className="space-y-1.5">
-                    {missing.map((s) => (
-                      <StudentRow key={s.id} student={s} location={null} variant="warning" />
-                    ))}
-                  </div>
-                );
-              })()}
-            </Section>
-
-            {/* ── 落車打卡總覽 ── */}
-            <Section
-              icon={<RouteIcon className="h-4 w-4 text-sky-600" />}
-              title={`落車打卡 (${totalOff}/${students.length})`}
-            >
-              {logs.filter((l) => l.type === "OFF").length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
-                  尚未有學生落車
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {logs
-                    .filter((l) => l.type === "OFF")
-                    .map((log) => (
-                      <StudentRow
-                        key={log.id}
-                        student={log.student}
-                        location={log.location_name}
-                        variant="info"
-                      />
-                    ))}
-                </div>
-              )}
-            </Section>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Header ── */}
       <header className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-3 text-white">
         <div className="flex items-center gap-2">
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">{authUser?.name ?? nanny.name}</span>
+            <span className="text-sm font-semibold">{authUser?.name ?? attendant.name}</span>
             <span className="flex items-center gap-1 text-[11px] text-slate-300">
               <BusIcon className="h-3 w-3" />
               {bus.plate_number} · {bus.route_name}
             </span>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setInfoOpen(true)}
-            variant="secondary"
-            size="sm"
-            className="h-8 bg-emerald-600 px-2 text-[11px] font-medium text-white hover:bg-emerald-500"
-            aria-label="打開本班次資訊"
-          >
-            <ListChecks className="mr-1 h-3.5 w-3.5" />
-            本班次資訊
-          </Button>
-        </div>
       </header>
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          setTabSwitching(true);
-          setTab(v as CheckLogType);
-          setTimeout(() => setTabSwitching(false), 300);
-        }}
-        className="w-full"
-      >
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="ON" className="text-sm">
-            上車打卡 ({totalOn}/{students.length})
-          </TabsTrigger>
-          <TabsTrigger value="OFF" className="text-sm">
-            落車打卡 ({totalOff}/{students.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* ── Main Tabs ── */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <Tabs
+          value={mainTab}
+          onValueChange={(v) => setMainTab(v as "scan" | "info")}
+          className="flex h-full flex-col"
+        >
+          <TabsList className="grid w-full grid-cols-2 shrink-0">
+            <TabsTrigger value="scan" className="text-sm">
+              <BusIcon className="mr-1.5 h-4 w-4" />
+              上落車打卡
+            </TabsTrigger>
+            <TabsTrigger value="info" className="text-sm">
+              <Info className="mr-1.5 h-4 w-4" />
+              本次資訊
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value={tab} className="mt-3 space-y-3">
-          {tabSwitching ? (
-            <TabSkeleton />
-          ) : (
-            <QrScanner onScan={handleScan} />
-          )}
+          {/* ── 上落車打卡 Tab ── */}
+          <TabsContent value="scan" className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0">
+            {/* Switch Button */}
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+              <span className={`text-sm font-medium ${scanTab === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
+                上車打卡
+              </span>
+              <button
+                onClick={() => {
+                  setTabSwitching(true);
+                  setScanTab(scanTab === "ON" ? "OFF" : "ON");
+                  setTimeout(() => setTabSwitching(false), 300);
+                }}
+                className={`relative flex h-7 w-14 items-center rounded-full px-1 transition-colors ${
+                  scanTab === "OFF" ? "bg-emerald-500" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    scanTab === "OFF" ? "translate-x-7" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span className={`text-sm font-medium ${scanTab === "OFF" ? "text-emerald-600" : "text-slate-400"}`}>
+                落車打卡
+              </span>
+            </div>
+
+            {/* QR Scanner */}
+            {tabSwitching ? (
+              <TabSkeleton />
+            ) : (
+              <QrScanner onScan={handleScan} />
+            )}
+
+            {/* 已完成上車掃瞄 / 落車掃瞄 */}
+            <Section
+              icon={scanTab === "ON" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CheckCircle className="h-4 w-4 text-sky-600" />}
+              title={scanTab === "ON" ? `已完成上車掃瞄 (${totalOn}/${students.length})` : `已完成落車掃瞄 (${totalOff}/${students.length})`}
+            >
+              {logs.filter((l) => l.type === scanTab).length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
+                  {scanTab === "ON" ? "尚未有學生上車" : "尚未有學生落車"}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {logs
+                    .filter((l) => l.type === scanTab)
+                    .map((log) => (
+                      <StudentRow
+                        key={log.id}
+                        student={log.student}
+                        location={log.location_name}
+                        variant={scanTab === "ON" ? "success" : "info"}
+                      />
+                    ))}
+                </div>
+              )}
+            </Section>
+          </TabsContent>
+
+          {/* ── 本次資訊 Tab ── */}
+          <TabsContent value="info" className="mt-3 space-y-4 overflow-y-auto flex-1 min-h-0 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400">
+          {/* ── 即時 Google Map ── */}
+          <Section
+            icon={<MapIcon className="h-4 w-4 text-emerald-600" />}
+            title="即時 Google Map 位置"
+          >
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              {geo.lat !== null && geo.lng !== null ? (
+                <iframe
+                  title="realtime-map"
+                  src={`https://maps.google.com/maps?q=${geo.lat},${geo.lng}&z=16&output=embed`}
+                  className="h-56 w-full"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : (
+                <div className="flex h-56 flex-col items-center justify-center gap-1 bg-slate-50 text-xs text-slate-400">
+                  <Compass className="h-6 w-6 animate-pulse text-slate-300" />
+                  {geo.error ? `無法取得位置：${geo.error}` : "取得 GPS 中…"}
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+              <span>
+                {geo.lat !== null && geo.lng !== null
+                  ? `經緯度：${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}${
+                      geo.accuracy ? ` (±${Math.round(geo.accuracy)}m)` : ""
+                    }`
+                  : "尚未取得定位"}
+              </span>
+              <button
+                onClick={() => geo.refresh()}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3 w-3" /> 重新定位
+              </button>
+            </div>
+          </Section>
+
+          {/* ── 本班次資訊 ── */}
+          <Section
+            icon={<Info className="h-4 w-4 text-sky-600" />}
+            title="本班次資訊"
+          >
+            <div className="space-y-1 rounded-lg border border-slate-200 bg-white p-3 text-xs">
+              <InfoRow icon={<RouteIcon className="h-3 w-3" />} label="班次 ID" value={`${trip.id.slice(0, 8)}…`} />
+              <InfoRow icon={<BusIcon className="h-3 w-3" />} label="車牌 / 路線" value={`${bus.plate_number} · ${bus.route_name}`} />
+              <InfoRow icon={<Clock className="h-3 w-3" />} label="日期" value={trip.date} />
+              <InfoRow icon={<RouteIcon className="h-3 w-3" />} label="班次類型" value={trip.type === "AM_GO" ? "上午上學" : "下午放學"} />
+              <InfoRow icon={<Radio className="h-3 w-3" />} label="狀態" value={trip.status === "active" ? "進行中" : "已完成"} />
+              <InfoRow icon={<Users className="h-3 w-3" />} label="管理員" value={authUser?.name ?? attendant.name} />
+            </div>
+          </Section>
+
+          {/* ── 上落車點 ── */}
+          <Section
+            icon={<MapPin className="h-4 w-4 text-amber-600" />}
+            title="上落車點"
+          >
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-medium text-slate-500">
+                  上車地點 (預設寫入每筆打卡)
+                </label>
+                <input
+                  value={pickupPoint}
+                  onChange={(e) => setPickupPoint(e.target.value)}
+                  placeholder="例如：沙田A線 · 首站"
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium text-slate-500">
+                  落車地點 (顯示於家長通知)
+                </label>
+                <input
+                  value={dropoffPoint}
+                  onChange={(e) => setDropoffPoint(e.target.value)}
+                  placeholder="例如：學校"
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+              {recentLocations.length > 0 ? (
+                <div>
+                  <p className="mb-1 mt-1 text-[10px] font-medium text-slate-500">
+                    最近打卡地點
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {recentLocations.map((loc) => (
+                      <button
+                        key={loc.name}
+                        onClick={() => setPickupPoint(loc.name)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600 transition-colors hover:bg-slate-100"
+                      >
+                        <MapPin className="h-2.5 w-2.5" /> {loc.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </Section>
+
+          {/* ── 未上車學生 ── */}
+          <Section
+            icon={<XCircle className="h-4 w-4 text-amber-600" />}
+            title={`未上車學生 (${students.length - totalOn})`}
+          >
+            {(() => {
+              const boardedSet = new Set(
+                logs.filter((l) => l.type === "ON").map((l) => l.student_id)
+              );
+              const missing = students.filter((s) => !boardedSet.has(s.id));
+              if (missing.length === 0) {
+                return (
+                  <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-center text-xs text-emerald-700">
+                    🎉 全體同學已完成上車打卡
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-1.5">
+                  {missing.map((s) => (
+                    <StudentRow key={s.id} student={s} location={null} variant="warning" />
+                  ))}
+                </div>
+              );
+            })()}
+          </Section>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </main>
   );
 }

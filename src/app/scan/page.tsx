@@ -1,16 +1,16 @@
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
 import type { Bus, CheckLogWithStudent, Student, Trip, User } from "@/lib/types";
-import { NannyDashboardClient } from "@/components/nanny/nanny-dashboard-client";
+import { ScanDashboardClient } from "@/components/scan/scan-dashboard-client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const HARDCODED_NANNY_ID = "22222222-2222-2222-2222-222222222222";
+const HARDCODED_ATTENDANT_ID = "22222222-2222-2222-2222-222222222222";
 const HARDCODED_TRIP_ID = "77777777-7777-7777-7777-777777777777";
 const HARDCODED_BUS_ID = "99999999-9999-9999-9999-999999999999";
 
 type LoadResult = {
-  nanny: User;
+  attendant: User;
   trip: Trip;
   bus: Bus;
   students: Student[];
@@ -18,18 +18,18 @@ type LoadResult = {
   supabaseConfigured: boolean;
 };
 
-const FALLBACK_NANNY: User = {
-  id: HARDCODED_NANNY_ID,
-  name: "張翠蘭姐(Nanny)",
+const FALLBACK_ATTENDANT: User = {
+  id: HARDCODED_ATTENDANT_ID,
+  name: "張翠蘭姐",
   phone: "+85290002222",
-  role: "nanny",
+  role: "attendant",
   assigned_bus_id: HARDCODED_BUS_ID,
 };
 
 const FALLBACK_TRIP: Trip = {
   id: HARDCODED_TRIP_ID,
   bus_id: HARDCODED_BUS_ID,
-  nanny_id: HARDCODED_NANNY_ID,
+  attendant_id: HARDCODED_ATTENDANT_ID,
   date: new Date().toISOString().slice(0, 10),
   type: "AM_GO",
   status: "active",
@@ -59,7 +59,7 @@ async function load(): Promise<LoadResult> {
 
   if (!adminConfigured) {
     return {
-      nanny: FALLBACK_NANNY,
+      attendant: FALLBACK_ATTENDANT,
       trip: FALLBACK_TRIP,
       bus: FALLBACK_BUS,
       students: FALLBACK_STUDENTS,
@@ -70,8 +70,8 @@ async function load(): Promise<LoadResult> {
 
   const supabase = getSupabaseAdmin()!;
 
-  const [nannyRes, tripRes, busRes, studentsRes, logsRes] = await Promise.all([
-    supabase.from("users").select("*").eq("id", HARDCODED_NANNY_ID).maybeSingle(),
+  const [attendantRes, tripRes, busRes, studentsRes, logsRes] = await Promise.all([
+    supabase.from("users").select("*").eq("id", HARDCODED_ATTENDANT_ID).maybeSingle(),
     supabase.from("trips").select("*").eq("id", HARDCODED_TRIP_ID).maybeSingle(),
     supabase.from("buses").select("*").eq("id", HARDCODED_BUS_ID).maybeSingle(),
     supabase.from("students").select("*", { count: "exact", head: false }),
@@ -83,7 +83,7 @@ async function load(): Promise<LoadResult> {
       .limit(50),
   ]);
 
-  const nanny = (nannyRes.data as User | null) ?? FALLBACK_NANNY;
+  const attendant = (attendantRes.data as User | null) ?? FALLBACK_ATTENDANT;
   const trip = (tripRes.data as Trip | null) ?? FALLBACK_TRIP;
   const bus = (busRes.data as Bus | null) ?? FALLBACK_BUS;
   const students = (studentsRes.data as Student[] | null) ?? FALLBACK_STUDENTS;
@@ -93,14 +93,14 @@ async function load(): Promise<LoadResult> {
       student: (log as CheckLogWithStudent).student ?? null,
     })) ?? [];
 
-  return { nanny, trip, bus, students, logs, supabaseConfigured: true };
+  return { attendant, trip, bus, students, logs, supabaseConfigured: true };
 }
 
-export default async function NannyPage() {
+export default async function ScanPage() {
   const data = await load();
   return (
-    <NannyDashboardClient
-      nanny={data.nanny}
+    <ScanDashboardClient
+      attendant={data.attendant}
       trip={data.trip}
       bus={data.bus}
       initialStudents={data.students}

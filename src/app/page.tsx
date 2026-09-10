@@ -24,7 +24,7 @@ export default function RootRedirectPage() {
     }
     if (user.role === "admin") {
       router.replace("/system-setting");
-    } else if (user.role === "nanny") {
+    } else if (user.role === "attendant") {
       router.replace("/scan");
     } else {
       router.replace("/lock");
@@ -32,12 +32,12 @@ export default function RootRedirectPage() {
   }, [router]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 text-slate-500">
+    <main className="flex h-full w-full flex-col items-center justify-center bg-slate-50 text-slate-500">
       <Bus className="mb-3 h-10 w-10 text-slate-700" />
       <Loader2 className="h-5 w-5 animate-spin" />
       <p className="mt-3 text-xs">載入中…</p>
       <p className="mt-1 text-[10px] text-slate-400">
-        {ROLE_LABEL.admin} / {ROLE_LABEL.nanny}
+        {ROLE_LABEL.admin} / {ROLE_LABEL.attendant}
       </p>
     </main>
   );

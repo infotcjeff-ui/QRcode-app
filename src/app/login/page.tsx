@@ -29,7 +29,7 @@ function LoginPageContent() {
   const { toast } = useToast();
 
   const initialRole =
-    (searchParams.get("role") as UserRole | null) === "nanny" ? "nanny" : "admin";
+    (searchParams.get("role") as UserRole | null) === "attendant" ? "attendant" : "admin";
 
   const [role, setRole] = useState<UserRole>(initialRole);
   const [password, setPassword] = useState<string>("");
@@ -95,7 +95,7 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
+    <main className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg">
@@ -113,7 +113,7 @@ function LoginPageContent() {
               <TabsTrigger value="admin" className="text-sm">
                 <ShieldCheck className="mr-1 h-4 w-4" /> 系統管理員
               </TabsTrigger>
-              <TabsTrigger value="nanny" className="text-sm">
+              <TabsTrigger value="attendant" className="text-sm">
                 <Bus className="mr-1 h-4 w-4" /> 打卡
               </TabsTrigger>
             </TabsList>
@@ -190,7 +190,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center text-slate-500">
+        <main className="flex h-full w-full items-center justify-center text-slate-500">
           <KeyRound className="h-6 w-6 animate-spin" />
         </main>
       }

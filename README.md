@@ -4,11 +4,13 @@ Mobile-first 校巴 QR Code 打卡系統，使用 Next.js 14 (App Router) + Type
 
 ## 主要功能
 
-- **🛡️ 管理員控制台** (`/admin`)：實時監控所有校巴路線、班次狀態、學生打卡紀錄與 WhatsApp 通知進度。
-- **📱 保姆流動打卡** (`/nanny`)：Mobile-first 介面，整合 `@html5-qrcode` 後置鏡頭掃描器、分頁切換上車/落車、即時已打卡清單與「未打卡學生」對比。
+- **🛡️ 管理員控制台** (`/system-setting/admin`)：實時監控所有校巴路線、班次狀態、學生打卡紀錄與 WhatsApp 通知進度。
+- **📊 統計表** (`/system-setting/admin/statistics`)：依打卡資料（check_logs）即時彙整進階統計，支援依日期區間、班次類型、校巴路線、保姆等多維度篩選；一鍵生成報表後寫入 Supabase `statistics_reports` 表，包含 KPI、路線 / 日期 / 時段 / 班次類型分布、Top/Bottom 學生等視覺化分析。
+- **📱 流動打卡** (`/scan`)：Mobile-first 介面，整合 `@html5-qrcode` 後置鏡頭掃描器、分頁切換上車/落車、即時已打卡清單與「未打卡學生」對比。
 - **👨‍👩‍👧 家長即時追蹤** (`/student/[id]`)：透過 Supabase Realtime 訂閱，子女每次打卡即時更新；包含歷史打卡紀錄。
 - **⚙️ API 路由**：
   - `/api/check-log` - 具冪等性 (Idempotency) 驗證的重複掃描防呆後端。
+  - `/api/statistics` - 生成、列出、刪除統計表（POST/GET/DELETE）；所有資料皆寫入 Supabase `statistics_reports` 表。
   - `/api/whatsapp` - 模擬 Meta WhatsApp Cloud API 通知 pipeline stub。
 
 ## 快速開始
@@ -22,7 +24,9 @@ cp .env.local.example .env.local
 # 然後填入 NEXT_PUBLIC_SUPABASE_URL 與 NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
 
 # 3. 執行 Supabase Migration
-# 將 supabase/migrations/20260819_init_schema.sql 套用到你的 Supabase 專案
+# 將以下 migration 套用到你的 Supabase 專案（依時序執行）：
+#   - supabase/migrations/20260819_init_schema.sql
+#   - supabase/migrations/20260910_statistics_reports.sql
 
 # 4. 啟動開發伺服器
 npm run dev
@@ -46,13 +50,15 @@ npm run dev
 ├── supabase/migrations/        # Supabase 資料庫 migration
 ├── src/
 │   ├── app/
-│   │   ├── admin/page.tsx      # 管理員儀表板
-│   │   ├── nanny/page.tsx      # 保姆 Mobile 打卡介面
+│   │   ├── system-setting/     # 角色入口 / 管理員後台（含統計表）
+│   │   ├── scan/page.tsx       # 流動打卡 (Nanny)
 │   │   ├── student/[id]/       # 家長即時追蹤
 │   │   ├── api/check-log/      # 打卡 API (含冪等性)
+│   │   ├── api/statistics/     # 統計表生成/列表/刪除 API
 │   │   └── api/whatsapp/       # WhatsApp 通知 stub
 │   ├── components/
 │   │   ├── ui/                 # shadcn/ui 元件
+│   │   ├── admin/              # 管理員頁專用元件
 │   │   └── nanny/              # 保姆頁專用元件
 │   └── lib/
 │       ├── supabase.ts         # Browser Supabase Client

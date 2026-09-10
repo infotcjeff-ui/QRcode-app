@@ -12,7 +12,7 @@ type Props = {
   onScan: (decodedText: string) => void;
 };
 
-const SCANNER_ELEMENT_ID = "nanny-qr-reader";
+const SCANNER_ELEMENT_ID = "scan-qr-reader";
 const SCANBOX_SIZE = 280;
 
 /**

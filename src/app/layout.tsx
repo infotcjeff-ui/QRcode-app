@@ -22,8 +22,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-HK" suppressHydrationWarning>
-      <body className="min-h-screen bg-slate-50 font-sans antialiased">
-        <Toaster>{children}</Toaster>
+      <body className="h-screen overflow-hidden bg-slate-50 font-sans antialiased">
+        <Toaster>
+          <main className="flex h-full w-full items-center justify-center">
+            {children}
+          </main>
+        </Toaster>
       </body>
     </html>
   );

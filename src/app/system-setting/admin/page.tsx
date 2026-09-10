@@ -100,7 +100,7 @@ export default async function AdminDashboardPage() {
   const busById = new Map(overview.buses.map((b) => [b.id, b]));
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex h-full w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-3xl">

@@ -44,7 +44,7 @@ function LockPageContent() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 text-slate-100">
+    <main className="flex h-full w-full flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 text-slate-100">
       {/* 背景裝飾 */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
@@ -59,9 +59,6 @@ function LockPageContent() {
           <h1 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
             校巴安全打卡系統
           </h1>
-          <p className="mt-1 text-sm text-slate-300">
-            School Bus Check-in · Site-wide Access
-          </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
@@ -136,7 +133,7 @@ export default function LockPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+        <main className="flex h-full w-full items-center justify-center bg-slate-950 text-slate-100">
           <Loader2 className="h-6 w-6 animate-spin" />
         </main>
       }
