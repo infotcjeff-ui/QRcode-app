@@ -44,7 +44,7 @@ function LockPageContent() {
   }
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 text-slate-100">
+    <main className="flex w-full flex-col items-center justify-center overflow-hidden bg-slate-950 px-4 py-10 text-slate-100">
       {/* 背景裝飾 */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
@@ -133,7 +133,7 @@ export default function LockPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex h-full w-full items-center justify-center bg-slate-950 text-slate-100">
+        <main className="flex w-full items-center justify-center bg-slate-950 text-slate-100">
           <Loader2 className="h-6 w-6 animate-spin" />
         </main>
       }

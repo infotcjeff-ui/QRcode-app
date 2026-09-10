@@ -2,8 +2,8 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { Bus, Student } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, QrCode as QrIcon } from "lucide-react";
+import { QrCode as QrIcon } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { QrCodeGrid } from "@/components/admin/qr-code-grid";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function QrCodesPage() {
   const { students, busPlateById } = await load();
 
   return (
-    <main className="flex h-full w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-3xl">
@@ -39,17 +39,9 @@ export default async function QrCodesPage() {
           </h1>
           <p className="text-sm text-slate-500">批次產生所有學生 QR Code，支援列印或下載 PNG</p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting/admin/students">
-              <ArrowLeft className="mr-2 h-4 w-4" /> 學生管理
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting">
-              <ArrowLeft className="mr-2 h-4 w-4" /> 系統設定
-            </Link>
-          </Button>
+        <div className="flex flex-wrap gap-2">
+          <BackButton href="/system-setting/admin/students" label="學生管理" variant="outline" />
+          <BackButton href="/system-setting" label="系統設定" variant="outline" />
         </div>
       </header>
 

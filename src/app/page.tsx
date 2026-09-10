@@ -32,7 +32,7 @@ export default function RootRedirectPage() {
   }, [router]);
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center bg-slate-50 text-slate-500">
+    <main className="flex w-full flex-col items-center justify-center bg-slate-50 text-slate-500">
       <Bus className="mb-3 h-10 w-10 text-slate-700" />
       <Loader2 className="h-5 w-5 animate-spin" />
       <p className="mt-3 text-xs">載入中…</p>

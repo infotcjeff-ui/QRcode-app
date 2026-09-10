@@ -150,6 +150,9 @@ export function QrCodeGrid({ students, busPlateById }: Props) {
                 <div className="text-center">
                   <p className="text-base font-semibold text-slate-900">{s.name}</p>
                   <p className="text-xs text-slate-500">{s.student_no}</p>
+                  <code className="mt-1 inline-block break-all rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] text-slate-600">
+                    {q.id}
+                  </code>
                   {plate ? <Badge variant="secondary" className="mt-1 text-[10px]">{plate}</Badge> : null}
                 </div>
                 <Button size="sm" variant="ghost" className="no-print text-xs" onClick={() => handleDownloadOne(q.id)}>

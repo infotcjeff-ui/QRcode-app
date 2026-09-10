@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-context";
-import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download, ArrowLeft, Trash2 } from "lucide-react";
+import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download, Trash2 } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { DeleteStudentButton } from "@/components/admin/delete-student-button";
 import { EditStudentDialog } from "@/components/admin/edit-student-dialog";
 import type { Bus, Student } from "@/lib/types";
@@ -200,7 +201,7 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
           </h1>
           <p className="text-sm text-slate-500">新增、查看、刪除學生資料，並取得家長追蹤連結</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href="/system-setting/admin/qr-codes">
               <QrIcon className="mr-2 h-4 w-4" /> 批次 QR Code
@@ -209,11 +210,8 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
           <Button onClick={() => setShowAddForm((v) => !v)} variant="default" size="sm">
             {showAddForm ? "取消新增" : "+ 新增學生"}
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting/admin">
-              <ArrowLeft className="mr-2 h-4 w-4" /> 後台
-            </Link>
-          </Button>
+          <BackButton href="/system-setting/admin" label="返回後台" variant="outline" />
+          <BackButton href="/system-setting" label="返回系統設定" variant="outline" />
         </div>
       </header>
 

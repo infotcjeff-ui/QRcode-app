@@ -2,8 +2,8 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { Bus, StatisticsReport, Trip, User } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, BarChart3, Database } from "lucide-react";
+import { BarChart3, Database } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { StatisticsClient } from "@/components/admin/statistics-client";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +59,7 @@ export default async function AdminStatisticsPage() {
   const data = await load();
 
   return (
-    <main className="flex h-full w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-3xl">
@@ -70,16 +70,8 @@ export default async function AdminStatisticsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting/admin">
-              <ArrowLeft className="mr-2 h-4 w-4" /> 管理員控制台
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting">
-              <ArrowLeft className="mr-2 h-4 w-4" /> 系統設定
-            </Link>
-          </Button>
+          <BackButton href="/system-setting/admin" label="返回管理員控制台" variant="outline" />
+          <BackButton href="/system-setting" label="返回系統設定" variant="outline" />
         </div>
       </header>
 

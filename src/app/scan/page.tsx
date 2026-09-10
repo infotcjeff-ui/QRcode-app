@@ -44,7 +44,7 @@ const FALLBACK_BUS: Bus = {
 
 const FALLBACK_STUDENTS: Student[] = [
   {
-    id: "88888888-8888-8888-8888-888888888888",
+    id: "72796632-8672-5bf2-bfe7-73e9e562eb31", // STU2026001 藍小明
     name: "藍小明",
     student_no: "STU2026001",
     photo_url: "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=400",

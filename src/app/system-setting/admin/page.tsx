@@ -11,10 +11,10 @@ import type {
 } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Activity, AlertCircle, CheckCircle2, Clock, Users, Bus as BusIcon } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, Clock, Users, Bus as BusIcon } from "lucide-react";
 import { formatTime } from "@/lib/utils";
+import { BackButton } from "@/components/ui/back-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "管理員控制台 · 校巴系統" };
@@ -100,7 +100,7 @@ export default async function AdminDashboardPage() {
   const busById = new Map(overview.buses.map((b) => [b.id, b]));
 
   return (
-    <main className="flex h-full w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex w-full flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-3xl">
@@ -109,11 +109,7 @@ export default async function AdminDashboardPage() {
           </h1>
           <p className="text-sm text-slate-500">陳大文主管 (Admin) · 即時全校監控</p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/system-setting">
-            <ArrowLeft className="mr-2 h-4 w-4" /> 返回系統設定
-          </Link>
-        </Button>
+        <BackButton href="/system-setting" label="返回系統設定" />
       </header>
 
       {!overview.fetched ? (

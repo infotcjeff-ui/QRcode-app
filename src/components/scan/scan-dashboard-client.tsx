@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BackButton } from "@/components/ui/back-button";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,7 @@ import {
 } from "lucide-react";
 import { QrScanner } from "@/components/scan/qr-scanner";
 import { useToast } from "@/components/ui/toast-context";
-import { isValidUuid } from "@/lib/utils";
+import { formatTime, isValidUuid } from "@/lib/utils";
 import { getAuthUser } from "@/lib/auth";
 import { useGeolocation } from "@/lib/use-geolocation";
 
@@ -306,14 +307,14 @@ export function ScanDashboardClient({
 
   if (!authChecked) {
     return (
-      <main className="flex h-full w-full items-center justify-center bg-slate-50">
+      <main className="flex w-full items-center justify-center bg-slate-50">
         <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
       </main>
     );
   }
 
   return (
-    <main className="flex h-full w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4">
+    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -393,8 +394,15 @@ export function ScanDashboardClient({
       </Dialog>
 
       {/* ── Header ── */}
-      <header className="flex items-center justify-between rounded-xl bg-slate-900 px-3 py-3 text-white">
+      <header className="sticky top-0 z-20 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-3 text-white shadow-md">
         <div className="flex items-center gap-2">
+          <BackButton
+            fallback="/system-setting"
+            label=""
+            iconOnly
+            variant="ghost"
+            className="text-white hover:bg-slate-700 hover:text-white"
+          />
           <div className="flex flex-col">
             <span className="text-sm font-semibold">{authUser?.name ?? attendant.name}</span>
             <span className="flex items-center gap-1 text-[11px] text-slate-300">
@@ -410,7 +418,7 @@ export function ScanDashboardClient({
         <Tabs
           value={mainTab}
           onValueChange={(v) => setMainTab(v as "scan" | "info")}
-          className="flex h-full flex-col"
+          className="flex flex-col"
         >
           <TabsList className="grid w-full grid-cols-2 shrink-0">
             <TabsTrigger value="scan" className="text-sm">
@@ -477,6 +485,7 @@ export function ScanDashboardClient({
                         student={log.student}
                         location={log.location_name}
                         variant={scanTab === "ON" ? "success" : "info"}
+                        timestamp={log.timestamp}
                       />
                     ))}
                 </div>
@@ -667,10 +676,12 @@ function StudentRow({
   student,
   location,
   variant,
+  timestamp,
 }: {
   student: Student | null;
   location: string | null;
   variant: "success" | "warning" | "info";
+  timestamp?: string | null;
 }) {
   const name = student?.name ?? "未知學生";
   return (
@@ -694,13 +705,20 @@ function StudentRow({
           <p className="text-[10px] text-slate-400">未提供地點</p>
         )}
       </div>
-      {variant === "success" ? (
-        <Badge variant="success" className="text-[10px]">已上車</Badge>
-      ) : variant === "info" ? (
-        <Badge variant="secondary" className="text-[10px]">已落車</Badge>
-      ) : (
-        <Badge variant="warning" className="text-[10px]">未打卡</Badge>
-      )}
+      <div className="flex flex-col items-end gap-0.5">
+        {variant === "success" ? (
+          <Badge variant="success" className="text-[10px]">已上車</Badge>
+        ) : variant === "info" ? (
+          <Badge variant="secondary" className="text-[10px]">已落車</Badge>
+        ) : (
+          <Badge variant="warning" className="text-[10px]">未打卡</Badge>
+        )}
+        {timestamp ? (
+          <span className="flex items-center gap-1 text-[10px] font-mono text-slate-500">
+            <Clock className="h-2.5 w-2.5" /> {formatTime(timestamp)}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

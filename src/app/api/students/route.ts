@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
 import { isValidUuid } from "@/lib/utils";
+import { uuidFromStudentNo } from "@/lib/uuid";
 import type { Student } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await supabase
     .from("students")
     .insert({
+      id: uuidFromStudentNo(student_no.trim()),
       name: name.trim(),
       student_no: student_no.trim(),
       photo_url: photo_url?.trim() || null,

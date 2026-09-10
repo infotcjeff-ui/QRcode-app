@@ -688,16 +688,6 @@ function ReportDetail({
             </div>
           </>
         )}
-
-        <Separator />
-        <details className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">
-          <summary className="cursor-pointer font-medium text-slate-700">
-            查看完整 JSON payload
-          </summary>
-          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-[10px] text-slate-600">
-            {JSON.stringify(report, null, 2)}
-          </pre>
-        </details>
       </CardContent>
     </Card>
   );

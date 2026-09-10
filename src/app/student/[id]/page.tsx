@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { CheckLog, CheckLogType, Student, Trip } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle2, Clock, MapPin, User } from "lucide-react";
+import { CheckCircle2, Clock, MapPin, User } from "lucide-react";
 import { formatTime } from "@/lib/utils";
+import { BackButton } from "@/components/ui/back-button";
 import { ParentRealtimeTracker } from "./parent-realtime-tracker";
 
 export const dynamic = "force-dynamic";
@@ -68,13 +67,9 @@ export default async function StudentParentPage({ params }: Props) {
   const initialCheckLog = initial.logs[0] ?? null;
 
   return (
-    <main className="flex h-full w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6">
+    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6">
       <header className="flex items-center justify-between">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/">
-            <ArrowLeft className="mr-1 h-4 w-4" /> 返回
-          </Link>
-        </Button>
+        <BackButton fallback="/student" label="返回搜尋" />
         <h1 className="text-sm font-medium text-slate-500">家長即時追蹤</h1>
       </header>
 
