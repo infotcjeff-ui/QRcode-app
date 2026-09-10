@@ -65,7 +65,14 @@ export function BottomNav() {
     >
       <div
         className={cn(
-          "pointer-events-auto relative flex items-center gap-1 rounded-full p-1.5",
+          // 寬一點的浮動膠囊：依項目數量給定 18–24rem 寬度，
+          // 確保按鈕內文可容納 5–6 個中文字 + 較大 icon + 文字。
+          "pointer-events-auto relative flex items-center rounded-full p-2",
+          items.length === 3
+            ? "w-[min(24rem,calc(100vw-2rem))]"
+            : items.length === 2
+            ? "w-[min(16rem,calc(100vw-2rem))]"
+            : "w-[min(8rem,calc(100vw-2rem))]",
           // Liquid glass 風格
           "border border-white/40 bg-white/40 shadow-[0_8px_32px_rgba(15,23,42,0.18)]",
           "backdrop-blur-2xl backdrop-saturate-150",
@@ -85,7 +92,10 @@ export function BottomNav() {
               key={it.href}
               href={it.href}
               className={cn(
-                "group relative flex min-w-[64px] flex-col items-center gap-0.5 rounded-full px-3 py-1.5 text-[10px] font-medium transition-all",
+                // 按鈕寬度自動均分 (flex-1)，min-w 提升到 80px 容納較大字級；
+                // 文字由 text-[10px] 升為 text-sm (14px)。
+                "group relative flex flex-1 flex-col items-center justify-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition-all",
+                "min-w-[80px]",
                 active
                   ? "bg-gradient-to-b from-slate-900 to-slate-700 text-white shadow-lg"
                   : "text-slate-700 hover:bg-white/60 hover:text-slate-900"
@@ -94,7 +104,8 @@ export function BottomNav() {
             >
               <Icon
                 className={cn(
-                  "h-5 w-5 transition-transform",
+                  // icon 由 h-5 w-5 → h-6 w-6 放大
+                  "h-6 w-6 transition-transform",
                   active ? "scale-110" : "group-hover:scale-105"
                 )}
               />
