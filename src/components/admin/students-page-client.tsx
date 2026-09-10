@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-context";
-import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download, Trash2 } from "lucide-react";
+import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { DeleteStudentButton } from "@/components/admin/delete-student-button";
 import { EditStudentDialog } from "@/components/admin/edit-student-dialog";
@@ -24,6 +24,7 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   const [newStudent, setNewStudent] = useState<Student | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [qrPreview, setQrPreview] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -35,6 +36,38 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   const [busId, setBusId] = useState<string>(buses[0]?.id ?? "");
 
   const busById = new Map(buses.map((b) => [b.id, b]));
+
+  // 首載或瀏覽器從快取返回時，主動從伺服器重新拉取學生清單，
+  // 確保資料一定來自 Supabase，不會因為 initialStudents 是 server-side render 的空陣列
+  // 而誤以為資料不見了。
+  useEffect(() => {
+    let alive = true;
+    async function refetch() {
+      try {
+        const res = await fetch("/api/students?limit=500", { cache: "no-store" });
+        const json = (await res.json()) as
+          | { success: true; data: Student[] }
+          | { success: false; error: string };
+        if (!alive) return;
+        if (res.ok && "success" in json && json.success && Array.isArray(json.data)) {
+          // 以伺服器資料為主，再用本地的新增/刪除合併。
+          setStudents((prev) => {
+            const serverIds = new Set(json.data.map((s) => s.id));
+            const localOnly = prev.filter((s) => !serverIds.has(s.id));
+            return [...json.data, ...localOnly];
+          });
+        }
+      } catch {
+        // 忽略錯誤，保留初始資料。
+      } finally {
+        if (alive) setHydrated(true);
+      }
+    }
+    refetch();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function validate(): string | null {
     if (!name.trim()) return "請填寫學生姓名";
@@ -89,7 +122,13 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
       }
 
       const created = json.data as Student;
-      setStudents((prev) => [...prev, created]);
+      // 立即寫入本地狀態 (避免等待伺服器回應導致閃爍)。
+      setStudents((prev) => {
+        const withoutDup = prev.filter((s) => s.id !== created.id);
+        return [...withoutDup, created].sort((a, b) =>
+          a.student_no.localeCompare(b.student_no)
+        );
+      });
       setNewStudent(created);
       setQrPreview(null);
 
@@ -108,6 +147,8 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
       setParentName("");
       setParentPhone("+852");
       setShowAddForm(false);
+
+      // 重新驗證伺服器資料，並刷新所有引用此路徑的 route segment。
       router.refresh();
     } catch (err) {
       toast({
@@ -124,10 +165,12 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   function handleDeleteStudent(deletedId: string) {
     setStudents((prev) => prev.filter((s) => s.id !== deletedId));
     if (newStudent?.id === deletedId) setNewStudent(null);
+    router.refresh();
   }
 
   function handleUpdateStudent(updated: Student) {
     setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    router.refresh();
   }
 
   async function downloadQr(studentId: string) {
@@ -139,7 +182,7 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8 scrollbar-inset">
       {/* ── QR Preview (shown after successful creation) ── */}
       {newStudent && qrPreview ? (
         <Card className="border-emerald-300 bg-emerald-50">
@@ -211,7 +254,6 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
             {showAddForm ? "取消新增" : "+ 新增學生"}
           </Button>
           <BackButton href="/system-setting/admin" label="返回後台" variant="outline" />
-          <BackButton href="/system-setting" label="返回系統設定" variant="outline" />
         </div>
       </header>
 
@@ -220,7 +262,7 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">新增學生</CardTitle>
-            <CardDescription>填寫完成後系統會自動產生 QR Code 並在此顯示</CardDescription>
+            <CardDescription>填寫完成後系統會自動寫入 Supabase 並在此顯示</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -278,8 +320,15 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             已註冊學生 ({students.length})
+            {hydrated ? null : (
+              <span className="ml-2 inline-flex items-center text-xs text-slate-400">
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" /> 與 Supabase 同步中…
+              </span>
+            )}
           </CardTitle>
-          <CardDescription>點擊「家長連結」取得追蹤 URL</CardDescription>
+          <CardDescription>
+            資料儲存於 Supabase <code>students</code> 表，列表會自動同步
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {students.length === 0 ? (
@@ -329,13 +378,6 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
               );
             })
           )}
-        </CardContent>
-      </Card>
-
-      {/* ── Phone test tip ── */}
-      <Card className="bg-slate-50">
-        <CardContent className="space-y-1 p-4 text-xs text-slate-600">
-          <p>💡 在手機測試保姆打卡頁面，確認 HTTPS 正常運作。</p>
         </CardContent>
       </Card>
     </main>

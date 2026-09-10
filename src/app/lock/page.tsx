@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bus, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldAlert } from "lucide-react";
+import { Bus, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,14 +15,34 @@ function LockPageContent() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") || "/login";
 
+  // 兩段式輸入：先輸入密碼，按下「下一步」進入確認畫面，
+  // 確認無誤後再提交，避免按 Enter 一次就完成。
+  const [step, setStep] = useState<"enter" | "confirm">("enter");
   const [password, setPassword] = useState("");
+  const [confirmInput, setConfirmInput] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setError(null);
-  }, [password]);
+  }, [password, confirmInput, step]);
+
+  function handleFirstStep(e: React.FormEvent) {
+    e.preventDefault();
+    if (!password.trim()) {
+      setError("請先輸入網站密碼");
+      return;
+    }
+    setError(null);
+    setStep("confirm");
+  }
+
+  function backToEnter() {
+    setStep("enter");
+    setConfirmInput("");
+    setError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,6 +52,12 @@ function LockPageContent() {
 
     // 模擬短暫延遲，避免暴力破解時的快速反應。
     await new Promise((resolve) => setTimeout(resolve, 350));
+
+    if (password.trim() !== confirmInput.trim()) {
+      setError("兩次輸入的密碼不一致，請重新確認。");
+      setSubmitting(false);
+      return;
+    }
 
     if (!verifySitePassword(password)) {
       setError("密碼不正確，請再試一次。");
@@ -67,58 +93,136 @@ function LockPageContent() {
             請輸入網站密碼以繼續
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-300">
-                網站密碼
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="請輸入密碼"
-                  autoFocus
-                  autoComplete="current-password"
-                  className="border-white/10 bg-slate-900/60 pr-10 text-slate-100 placeholder:text-slate-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:text-slate-100"
-                  aria-label={showPassword ? "隱藏密碼" : "顯示密碼"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {error ? (
-              <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            ) : null}
-
-            <Button
-              type="submit"
-              disabled={submitting || !password}
-              className="w-full bg-emerald-600 hover:bg-emerald-500"
-              size="lg"
+          {/* 兩段式進度指示 */}
+          <div className="mb-4 flex items-center gap-2 text-[11px] text-slate-400">
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${
+                step === "enter" ? "bg-emerald-500 text-white" : "bg-emerald-700 text-white"
+              }`}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  驗證中…
-                </>
-              ) : (
-                <>
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  進入系統
-                </>
-              )}
-            </Button>
-          </form>
+              {step === "enter" ? "1" : <CheckCircle2 className="h-3 w-3" />}
+            </span>
+            <span>輸入密碼</span>
+            <span className="h-px w-6 bg-slate-600" />
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${
+                step === "confirm" ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"
+              }`}
+            >
+              2
+            </span>
+            <span>再次確認</span>
+          </div>
+
+          {step === "enter" ? (
+            <form onSubmit={handleFirstStep} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-300">
+                  網站密碼 (第一次)
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="請輸入密碼"
+                    autoFocus
+                    autoComplete="current-password"
+                    className="border-white/10 bg-slate-900/60 pr-10 text-slate-100 placeholder:text-slate-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:text-slate-100"
+                    aria-label={showPassword ? "隱藏密碼" : "顯示密碼"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error ? (
+                <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+
+              <Button
+                type="submit"
+                disabled={!password.trim()}
+                className="w-full bg-emerald-600 hover:bg-emerald-500"
+                size="lg"
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                下一步
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-300">
+                  再次輸入網站密碼 (確認)
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={confirmInput}
+                    onChange={(e) => setConfirmInput(e.target.value)}
+                    placeholder="請再次輸入同一個密碼"
+                    autoFocus
+                    autoComplete="current-password"
+                    className="border-white/10 bg-slate-900/60 pr-10 text-slate-100 placeholder:text-slate-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition-colors hover:text-slate-100"
+                    aria-label={showPassword ? "隱藏密碼" : "顯示密碼"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error ? (
+                <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
+                  size="lg"
+                  onClick={backToEnter}
+                >
+                  返回上一步
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting || !confirmInput.trim()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500"
+                  size="lg"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      驗證中…
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      確認進入
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
 
         <p className="mt-6 text-center text-[11px] text-slate-500">

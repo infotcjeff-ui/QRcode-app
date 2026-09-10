@@ -67,7 +67,7 @@ export default async function StudentParentPage({ params }: Props) {
   const initialCheckLog = initial.logs[0] ?? null;
 
   return (
-    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6">
+    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6 scrollbar-inset">
       <header className="flex items-center justify-between">
         <BackButton fallback="/student" label="返回搜尋" />
         <h1 className="text-sm font-medium text-slate-500">家長即時追蹤</h1>

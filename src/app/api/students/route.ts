@@ -9,6 +9,56 @@ export const dynamic = "force-dynamic";
 
 const PHONE_REGEX = /^\+852\d{8}$/;
 
+export async function GET(request: NextRequest) {
+  const limitParam = new URL(request.url).searchParams.get("limit");
+  const limit = Math.min(Math.max(Number(limitParam ?? 200) || 200, 1), 500);
+
+  if (!isSupabaseAdminConfigured()) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Supabase service role key 未設定，無法讀取資料。請設定 .env.local。",
+      },
+      { status: 500 }
+    );
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json(
+      { success: false, error: "Supabase client 初始化失敗。" },
+      { status: 500 }
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, name, student_no, photo_url, parent_name, parent_phone, assigned_bus_id")
+    .order("student_no", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    console.error("[api/students] GET failed:", error.code, error.message);
+    const isRls = error.code === "42501" || error.message.includes("row-level security");
+    if (isRls) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "資料庫權限不足。請在 Supabase SQL Editor 執行：ALTER TABLE students DISABLE ROW LEVEL SECURITY;",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: (data as Student[]) ?? [],
+  });
+}
+
 function badRequest(error: string) {
   return NextResponse.json({ success: false, error }, { status: 400 });
 }

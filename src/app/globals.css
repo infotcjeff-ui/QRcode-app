@@ -68,6 +68,36 @@
   }
 }
 
+/* -----------------------------------------------------------------------
+ * Insert-style scrollbar
+ *  - 整個站台用戶捲動區使用 inset (overlay) 滾動條，
+ *    不佔版面空間，視覺上更貼近內容。
+ *  - 仍可在桌面瀏覽器滾輪 / 觸控裝置滑動。
+ * --------------------------------------------------------------------- */
+@layer utilities {
+  .scrollbar-inset {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 23, 42, 0.25) transparent;
+  }
+  .scrollbar-inset::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-inset::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-inset::-webkit-scrollbar-thumb {
+    background-color: rgba(15, 23, 42, 0.25);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-inset:hover::-webkit-scrollbar-thumb,
+  .scrollbar-inset:focus-within::-webkit-scrollbar-thumb {
+    background-color: rgba(15, 23, 42, 0.4);
+  }
+}
+
 #qr-reader__dashboard_section_csr button {
   background-color: hsl(var(--primary));
   color: hsl(var(--primary-foreground));

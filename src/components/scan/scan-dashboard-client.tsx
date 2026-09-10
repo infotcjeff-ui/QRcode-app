@@ -314,7 +314,7 @@ export function ScanDashboardClient({
   }
 
   return (
-    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4">
+    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -397,6 +397,7 @@ export function ScanDashboardClient({
       <header className="sticky top-0 z-20 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-3 text-white shadow-md">
         <div className="flex items-center gap-2">
           <BackButton
+            parent="/system-setting"
             fallback="/system-setting"
             label=""
             iconOnly

@@ -22,13 +22,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-HK" suppressHydrationWarning>
-      <body className="h-screen w-screen overflow-hidden bg-slate-50 font-sans antialiased">
+      <body className="min-h-screen w-screen bg-slate-50 font-sans antialiased">
         <Toaster>
           {/*
-            全局容器：套用 safe-top / safe-bottom 處理 iPhone 瀏海/底部 Home Indicator。
-            取消 items-center / justify-center，讓各頁面的 header 留在頂部、不被狀態列遮擋。
+            全局容器：使用 min-h 取代 h-screen，讓頁面依內容高度自然延長。
+            每頁自行決定自身高度 / 滾動行為，並使用 .scrollbar-inset (inset 風格)。
           */}
-          <div className="flex h-full w-full flex-col overflow-hidden safe-top safe-bottom">
+          <div className="flex min-h-screen w-full flex-col safe-top safe-bottom">
             {children}
           </div>
         </Toaster>

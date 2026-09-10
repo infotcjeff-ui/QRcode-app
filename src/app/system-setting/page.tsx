@@ -4,7 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BackButton } from "@/components/ui/back-button";
+import { BusesManagementClient } from "@/components/admin/buses-management-client";
+import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
+import type { Bus as BusType } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
 export const metadata = {
   title: "系統設定 · 校巴安全打卡系統",
 };
@@ -30,7 +34,7 @@ const ROLES: RoleLink[] = [
   {
     href: "/system-setting/admin/statistics",
     title: "統計表",
-    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表，並可一鍵生成新報表。",
+    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表。",
     icon: <BarChart3 className="h-8 w-8" />,
     badge: "Reports",
     tone: "success",
@@ -69,11 +73,27 @@ const ROLES: RoleLink[] = [
   },
 ];
 
-export default function SystemSettingPage() {
+async function loadBuses(): Promise<BusType[]> {
+  if (!isSupabaseAdminConfigured()) return [];
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return [];
+  try {
+    const { data } = await supabase
+      .from("buses")
+      .select("id, plate_number, route_name, capacity")
+      .order("route_name", { ascending: true });
+    return (data as BusType[] | null) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export default async function SystemSettingPage() {
+  const buses = await loadBuses();
   return (
-    <main className="flex w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8">
+    <main className="flex w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8 scrollbar-inset">
       <header className="flex items-center justify-center gap-2 sm:justify-between">
-        <BackButton fallback="/login" className="hidden sm:inline-flex" />
+        <BackButton parent="/login" fallback="/login" className="hidden sm:inline-flex" />
         <div className="flex items-center gap-2">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
             <Bus className="h-5 w-5" />
@@ -85,35 +105,40 @@ export default function SystemSettingPage() {
         <div className="hidden sm:block sm:w-[88px]" aria-hidden />
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ROLES.map((role) => (
-          <Card
-            key={role.href}
-            className="group flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-md"
-          >
-            <CardHeader>
-              <div className="mb-2 flex items-center justify-between">
-                <div className="rounded-lg bg-slate-100 p-2 text-slate-700 group-hover:bg-slate-900 group-hover:text-white">
-                  {role.icon}
+      <section>
+        <h2 className="mb-3 text-base font-semibold text-slate-700 sm:text-lg">功能入口</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {ROLES.map((role) => (
+            <Card
+              key={role.href}
+              className="group flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-md"
+            >
+              <CardHeader>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="rounded-lg bg-slate-100 p-2 text-slate-700 group-hover:bg-slate-900 group-hover:text-white">
+                    {role.icon}
+                  </div>
+                  <Badge variant={role.tone}>{role.badge}</Badge>
                 </div>
-                <Badge variant={role.tone}>{role.badge}</Badge>
-              </div>
-              <CardTitle className="text-xl">{role.title}</CardTitle>
-              <CardDescription className="min-h-[3rem] text-sm">
-                {role.description}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full">
-                <Link href={role.href}>
-                  進入測試
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                <CardTitle className="text-xl">{role.title}</CardTitle>
+                <CardDescription className="min-h-[3rem] text-sm">
+                  {role.description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className="w-full">
+                  <Link href={role.href}>
+                    進入測試
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </section>
+
+      <BusesManagementClient initialBuses={buses} />
 
       <footer className="mt-auto rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">
         <p>

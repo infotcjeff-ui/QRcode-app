@@ -51,7 +51,7 @@ export default async function ParentSearchPage() {
   const students = await loadStudents();
 
   return (
-    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6">
+    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6 scrollbar-inset">
       <header className="flex items-center justify-between">
         <BackButton fallback="/" label="回首頁" />
         <h1 className="text-sm font-medium text-slate-500">家長即時追蹤 · 搜尋</h1>

@@ -2,12 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
-  ArrowLeft,
   Bus,
   KeyRound,
-  Lock,
   ShieldCheck,
   ShieldAlert,
 } from "lucide-react";
@@ -16,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast-context";
 import {
-  clearSiteAccessCookie,
   ROLE_LABEL,
   setAuthUser,
   type AuthUser,
@@ -89,11 +85,6 @@ function LoginPageContent() {
     }
   }
 
-  function handleLockSite() {
-    clearSiteAccessCookie();
-    router.replace("/lock");
-  }
-
   return (
     <main className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
       <div className="w-full max-w-md">
@@ -162,25 +153,6 @@ function LoginPageContent() {
             </Button>
           </form>
         </div>
-
-        <div className="mt-6 flex items-center justify-between text-xs text-slate-500">
-          <Link
-            href="/lock"
-            className="inline-flex items-center gap-1 hover:text-slate-700"
-            onClick={(e) => {
-              e.preventDefault();
-              handleLockSite();
-            }}
-          >
-            <Lock className="h-3 w-3" /> 重新輸入網站密碼
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 hover:text-slate-700"
-          >
-            <ArrowLeft className="h-3 w-3" /> 回首頁
-          </Link>
-        </div>
       </div>
     </main>
   );
@@ -190,7 +162,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex h-full w-full items-center justify-center text-slate-500">
+        <main className="flex w-full items-center justify-center text-slate-500">
           <KeyRound className="h-6 w-6 animate-spin" />
         </main>
       }
