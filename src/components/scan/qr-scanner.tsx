@@ -14,15 +14,12 @@ type Props = {
 
 const SCANNER_ELEMENT_ID = "scan-qr-reader";
 const SCANBOX_SIZE = 280;
-// 掃描成功後的冷卻時間（毫秒），防止同一 QR Code 被短時間內重複讀取
-const SCAN_COOLDOWN_MS = 3000;
 
 /**
  * QR Code 掃描器：
  *  - 內建啟動 / 停止按鈕
  *  - 永遠使用後置 (環境) 鏡頭
  *  - 沒有 reload / 切換鏡頭選項
- *  - 內建冷卻時間機制，防止重複掃描
  */
 export function QrScanner({ onScan }: Props) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -30,9 +27,6 @@ export function QrScanner({ onScan }: Props) {
   const [isRunning, setIsRunning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [active, setActive] = useState(false);
-  // 冷卻狀態：記錄最後成功掃描的 ID 和時間戳
-  const [cooldownId, setCooldownId] = useState<string | null>(null);
-  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   const stopScanner = async () => {
@@ -70,11 +64,6 @@ export function QrScanner({ onScan }: Props) {
           disableFlip: false,
         },
         (decodedText) => {
-          // 如果處於冷卻狀態，不處理同一個 ID
-          if (cooldownId === decodedText) {
-            return;
-          }
-
           if (!isValidUuid(decodedText)) {
             toast({
               title: "QR Code 無效",
@@ -84,16 +73,6 @@ export function QrScanner({ onScan }: Props) {
             });
             return;
           }
-
-          // 設置冷卻狀態，防止短時間內重複掃描同一 QR Code
-          setCooldownId(decodedText);
-          if (cooldownTimerRef.current) {
-            clearTimeout(cooldownTimerRef.current);
-          }
-          cooldownTimerRef.current = setTimeout(() => {
-            setCooldownId(null);
-          }, SCAN_COOLDOWN_MS);
-
           onScan(decodedText);
         },
         () => {
@@ -131,9 +110,6 @@ export function QrScanner({ onScan }: Props) {
   useEffect(() => {
     return () => {
       void stopScanner();
-      if (cooldownTimerRef.current) {
-        clearTimeout(cooldownTimerRef.current);
-      }
     };
   }, []);
 
@@ -224,13 +200,6 @@ export function QrScanner({ onScan }: Props) {
               </>
             )}
           </Button>
-          {/* 冷卻狀態指示器 */}
-          {isRunning && cooldownId && (
-            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-amber-600">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-              <span>冷卻中，請稍候…</span>
-            </div>
-          )}
         </CardContent>
       </Card>
     </>

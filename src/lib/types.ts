@@ -74,6 +74,24 @@ export type CheckLogResponse = {
     | "CONFIG_ERROR";
 };
 
+export type CheckLogDeleteRequest = {
+  cancelled_by_user_id?: string;
+  cancelled_by_name?: string;
+  reason?: string;
+};
+
+export type CheckLogDeleteResponse = {
+  success: boolean;
+  data?: {
+    deleted_log_id: string;
+    trip_id: string;
+    student_id: string;
+    type: CheckLogType;
+  };
+  error?: string;
+  error_code?: "NOT_FOUND" | "INVALID_PAYLOAD" | "CONFIG_ERROR";
+};
+
 export type WhatsappRequest = {
   student_id: string;
   trip_id: string;

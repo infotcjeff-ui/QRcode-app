@@ -30,10 +30,11 @@ export function QrCodeGrid({ students, busPlateById }: Props) {
   async function generate() {
     setGenerating(true);
     try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
       const list: QrSvg[] = await Promise.all(
         students.map(async (s) => ({
           id: s.id,
-          dataUrl: await QRCode.toDataURL(s.id, {
+          dataUrl: await QRCode.toDataURL(`${origin}/student/${s.id}`, {
             errorCorrectionLevel: "M",
             margin: 1,
             width: size,
@@ -51,10 +52,11 @@ export function QrCodeGrid({ students, busPlateById }: Props) {
     setSize(next);
     setGenerating(true);
     try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
       const list: QrSvg[] = await Promise.all(
         students.map(async (s) => ({
           id: s.id,
-          dataUrl: await QRCode.toDataURL(s.id, {
+          dataUrl: await QRCode.toDataURL(`${origin}/student/${s.id}`, {
             errorCorrectionLevel: "M",
             margin: 1,
             width: next,
@@ -73,19 +75,26 @@ export function QrCodeGrid({ students, busPlateById }: Props) {
   }
 
   async function handleDownloadOne(studentId: string) {
-    const url = qrs.find((q) => q.id === studentId)?.dataUrl;
-    if (!url) return;
+    const qrInfo = qrs.find((q) => q.id === studentId);
+    if (!qrInfo) return;
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `qr-${studentId.slice(0, 8)}.png`;
+    a.href = qrInfo.dataUrl;
+    // 檔案名稱格式：學生姓名_QRCode-{uuid前8碼}.png
+    const safeName = student.name.replace(/[\\/:*?"<>|]/g, "_");
+    a.download = `${safeName}_QRCode-${studentId.slice(0, 8)}.png`;
     a.click();
   }
 
   async function handleDownloadAll() {
     for (const q of qrs) {
+      const student = students.find((s) => s.id === q.id);
+      if (!student) continue;
       const a = document.createElement("a");
       a.href = q.dataUrl;
-      a.download = `qr-${q.id.slice(0, 8)}.png`;
+      const safeName = student.name.replace(/[\\/:*?"<>|]/g, "_");
+      a.download = `${safeName}_QRCode-${q.id.slice(0, 8)}.png`;
       a.click();
       await new Promise((r) => setTimeout(r, 80));
     }

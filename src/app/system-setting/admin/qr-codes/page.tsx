@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
 import type { Bus, Student } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { QrCode as QrIcon } from "lucide-react";
@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 async function load(): Promise<{ students: Student[]; busPlateById: Record<string, string> }> {
   try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return { students: [], busPlateById: {} };
     const [studentsRes, busesRes] = await Promise.all([
       supabase.from("students").select("*").order("student_no"),
       supabase.from("buses").select("*"),

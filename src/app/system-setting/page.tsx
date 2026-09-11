@@ -80,7 +80,7 @@ const ROLES: RoleLink[] = [
 
 export default function SystemSettingPage() {
   return (
-    <main className="flex w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8 scrollbar-inset">
+    <main className="flex w-full max-w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8 scrollbar-inset">
       <header className="flex items-center justify-center gap-2 sm:justify-between">
         <BackButton parent="/profile" fallback="/profile" className="hidden sm:inline-flex" />
         <div className="flex items-center gap-2">

@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
   }
 
   revalidatePath("/system-setting/admin/students");
+  revalidatePath("/system-setting/admin/qr-codes");
   revalidatePath("/scan");
   return NextResponse.json({ success: true, data: data as Student }, { status: 201 });
 }
@@ -218,6 +219,7 @@ export async function PUT(request: NextRequest) {
   }
 
   revalidatePath("/system-setting/admin/students");
+  revalidatePath("/system-setting/admin/qr-codes");
   revalidatePath("/scan");
   return NextResponse.json({ success: true, data: data as Student });
 }
@@ -245,5 +247,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 
+  revalidatePath("/system-setting/admin/students");
+  revalidatePath("/system-setting/admin/qr-codes");
   return NextResponse.json({ success: true });
 }

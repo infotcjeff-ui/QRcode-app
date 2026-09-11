@@ -55,9 +55,8 @@ export function StatisticsClient({ initialReports, buses, trips, users }: Props)
   const [reports, setReports] = useState<StatisticsReport[]>(initialReports);
   const [generating, setGenerating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialReports[0]?.id ?? null
-  );
+  // 預設不選中任何報表，避免一進入頁面就彈出 popup；只有點擊報表時才開啟。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // 預設區間：本月第一天 ~ 今天
   const today = new Date();
@@ -80,10 +79,10 @@ export function StatisticsClient({ initialReports, buses, trips, users }: Props)
     [users]
   );
 
+  // 進入頁面時不自動選中報表，避免 popup 自動彈出；只有在用戶點擊報表卡片時才會打開。
+  // 保留 useEffect 是為了未來若有需要可重新引入自動選擇，目前行為為「點擊才開啟」。
   useEffect(() => {
-    if (!selectedId && initialReports[0]) {
-      setSelectedId(initialReports[0].id);
-    }
+    // intentionally left blank: do not auto-select a report on mount
   }, [initialReports, selectedId]);
 
   const selected = useMemo(
@@ -510,7 +509,7 @@ function ReportDetailPopup({
   onClose: () => void;
 }) {
   return (
-    <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto scrollbar-inset">
+    <DialogContent className="m-4 max-h-[90vh] max-w-3xl overflow-y-auto border-2 border-emerald-500 scrollbar-inset sm:m-8">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-lg">
           <Activity className="h-5 w-5 text-emerald-600" /> {report.title}

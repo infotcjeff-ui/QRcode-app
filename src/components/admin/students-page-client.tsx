@@ -133,7 +133,8 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
       setQrPreview(null);
 
       const { default: QRCode } = await import("qrcode");
-      const url = await QRCode.toDataURL(created.id, {
+      const origin = window.location.origin;
+      const url = await QRCode.toDataURL(`${origin}/student/${created.id}`, {
         errorCorrectionLevel: "M",
         margin: 1,
         width: 200,
@@ -177,7 +178,9 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
     if (!qrPreview || newStudent?.id !== studentId) return;
     const a = document.createElement("a");
     a.href = qrPreview;
-    a.download = `qr-${studentId.slice(0, 8)}.png`;
+    // 檔案名稱格式：學生姓名_QRCode-{uuid前8碼}.png
+    const safeName = newStudent.name.replace(/[\\/:*?"<>|]/g, "_");
+    a.download = `${safeName}_QRCode-${studentId.slice(0, 8)}.png`;
     a.click();
   }
 

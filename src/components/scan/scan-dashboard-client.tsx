@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -39,11 +40,13 @@ import {
   RefreshCw,
   Clock,
   Compass,
+  Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import { QrScanner } from "@/components/scan/qr-scanner";
 import { useToast } from "@/components/ui/toast-context";
 import { formatTime, isValidUuid } from "@/lib/utils";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, isAdmin } from "@/lib/auth";
 import { useGeolocation } from "@/lib/use-geolocation";
 
 type Props = {
@@ -85,6 +88,10 @@ export function ScanDashboardClient({
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authUser, setAuthUser] = useState<ReturnType<typeof getAuthUser>>(null);
+  // 取消打卡 Dialog 狀態 (僅 admin 可見)
+  const [cancelTarget, setCancelTarget] = useState<CheckLogWithStudent | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   const geo = useGeolocation({ watchIntervalMs: 30000 });
 
@@ -106,6 +113,8 @@ export function ScanDashboardClient({
       window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
     setIsInsecureContext(window.location.protocol !== "https:" && !isLocal);
   }, []);
+
+  const isAdminUser = isAdmin(authUser);
 
   const studentsById = useMemo(() => {
     const map = new Map<string, Student>();
@@ -302,6 +311,87 @@ export function ScanDashboardClient({
     [studentsById, logs, scanTab, toast]
   );
 
+  // ── 取消打卡：僅 admin 可用 ──
+  const requestCancel = useCallback((log: CheckLogWithStudent) => {
+    if (!isAdminUser) return;
+    setCancelTarget(log);
+    setCancelReason("");
+  }, [isAdminUser]);
+
+  const closeCancelDialog = useCallback(() => {
+    if (cancelSubmitting) return;
+    setCancelTarget(null);
+    setCancelReason("");
+  }, [cancelSubmitting]);
+
+  const confirmCancel = useCallback(async () => {
+    if (!cancelTarget || cancelSubmitting) return;
+    if (!isAdminUser) {
+      toast({
+        title: "權限不足",
+        description: "只有系統管理員可以取消打卡紀錄。",
+        variant: "destructive",
+        duration: 4000,
+      });
+      setCancelTarget(null);
+      return;
+    }
+
+    setCancelSubmitting(true);
+    try {
+      const res = await fetch(`/api/check-log/${cancelTarget.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cancelled_by_user_id: authUser?.id ?? null,
+          cancelled_by_name: authUser?.name ?? null,
+          reason: cancelReason.trim() || null,
+        }),
+      });
+
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { deleted_log_id: string; trip_id: string; student_id: string; type: CheckLogType };
+        error?: string;
+        error_code?: string;
+      };
+
+      if (!res.ok || !json.success) {
+        const msg = json.error ?? "取消打卡失敗，請重試。";
+        toast({
+          title: "取消失敗",
+          description: msg,
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+
+      // 從本地 state 移除紀錄 (學生可重新掃瞄)
+      setLogs((prev) => prev.filter((l) => l.id !== cancelTarget.id));
+
+      const studentName = cancelTarget.student?.name ?? "學生";
+      const actionLabel = cancelTarget.type === "ON" ? "上車" : "落車";
+      toast({
+        title: "✅ 已取消打卡",
+        description: `${studentName} 的${actionLabel}打卡已取消，可重新掃瞄。`,
+        duration: 3500,
+      });
+      setCancelTarget(null);
+      setCancelReason("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "網絡錯誤";
+      toast({
+        title: "網絡錯誤",
+        description: message,
+        variant: "destructive",
+        duration: 4000,
+      });
+    } finally {
+      setCancelSubmitting(false);
+    }
+  }, [cancelTarget, cancelSubmitting, cancelReason, authUser, isAdminUser, toast]);
+
   const totalOn = logs.filter((l) => l.type === "ON").length;
   const totalOff = logs.filter((l) => l.type === "OFF").length;
 
@@ -388,6 +478,108 @@ export function ScanDashboardClient({
                 <CheckCircle2 className="mr-1 h-4 w-4" />
               )}
               確認打卡
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 取消打卡 Dialog (僅 admin 可觸發) ── */}
+      <Dialog
+        open={!!cancelTarget}
+        onOpenChange={(open) => {
+          if (!open) closeCancelDialog();
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader className="pb-2">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-14 w-14">
+                {cancelTarget?.student?.photo_url ? (
+                  <AvatarImage src={cancelTarget.student.photo_url} alt={cancelTarget.student.name} />
+                ) : null}
+                <AvatarFallback className="text-lg">
+                  {cancelTarget?.student?.name?.slice(0, 1) ?? "?"}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-xl">
+                  <ShieldCheck className="h-4 w-4 text-amber-500" />
+                  確認取消打卡
+                </DialogTitle>
+                <p className="text-sm text-slate-500">
+                  {cancelTarget?.student?.name ?? ""} · 學號 {cancelTarget?.student?.student_no ?? "-"}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-sm">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-800">打卡類型</span>
+              <span className="font-semibold text-amber-900">
+                {cancelTarget?.type === "ON" ? "上車打卡" : "落車打卡"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-800">原始時間</span>
+              <span className="font-mono font-semibold text-amber-900">
+                {cancelTarget?.timestamp ? formatTime(cancelTarget.timestamp) : "-"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-800">地點</span>
+              <span className="font-medium text-amber-900">
+                {cancelTarget?.location_name ?? "未提供地點"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-800">操作者</span>
+              <span className="font-medium text-amber-900">
+                {authUser?.name ?? "未知管理員"}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[10px] font-medium text-slate-500">
+              取消原因 (選填，僅供內部記錄)
+            </label>
+            <Input
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="例如：學生重複掃瞄、選錯學生…"
+              className="h-9 text-sm"
+              maxLength={120}
+              disabled={cancelSubmitting}
+            />
+          </div>
+
+          <div className="rounded-md border border-rose-200 bg-rose-50/70 p-2 text-[11px] text-rose-700">
+            ⚠️ 取消後該學生即可重新掃瞄登記。請確認無誤再操作。
+          </div>
+
+          <div className="flex-row flex gap-2">
+            <Button
+              variant="outline"
+              onClick={closeCancelDialog}
+              disabled={cancelSubmitting}
+              className="flex-1"
+            >
+              <X className="mr-1 h-4 w-4" />
+              返回
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmCancel}
+              disabled={cancelSubmitting}
+              className="flex-1"
+            >
+              {cancelSubmitting ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-4 w-4" />
+              )}
+              確認取消
             </Button>
           </div>
         </DialogContent>
@@ -487,6 +679,8 @@ export function ScanDashboardClient({
                         location={log.location_name}
                         variant={scanTab === "ON" ? "success" : "info"}
                         timestamp={log.timestamp}
+                        showCancelButton={isAdminUser}
+                        onCancel={() => requestCancel(log)}
                       />
                     ))}
                 </div>
@@ -678,20 +872,25 @@ function StudentRow({
   location,
   variant,
   timestamp,
+  onCancel,
+  showCancelButton,
 }: {
   student: Student | null;
   location: string | null;
   variant: "success" | "warning" | "info";
   timestamp?: string | null;
+  onCancel?: () => void;
+  showCancelButton?: boolean;
 }) {
   const name = student?.name ?? "未知學生";
+  const canCancel = showCancelButton && !!onCancel && variant !== "warning";
   return (
     <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
       <Avatar className="h-10 w-10">
         {student?.photo_url ? <AvatarImage src={student.photo_url} alt={name} className="object-cover" /> : null}
         <AvatarFallback>{name.slice(0, 1)}</AvatarFallback>
       </Avatar>
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold text-slate-800">{name}</span>
           {student?.student_no ? (
@@ -706,14 +905,27 @@ function StudentRow({
           <p className="text-xs text-slate-400">未提供地點</p>
         )}
       </div>
-      <div className="flex flex-col items-end gap-0.5">
-        {variant === "success" ? (
-          <Badge variant="success" className="text-xs">已上車</Badge>
-        ) : variant === "info" ? (
-          <Badge variant="secondary" className="text-xs">已落車</Badge>
-        ) : (
-          <Badge variant="warning" className="text-xs">未打卡</Badge>
-        )}
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-1.5">
+          {variant === "success" ? (
+            <Badge variant="success" className="text-xs">已上車</Badge>
+          ) : variant === "info" ? (
+            <Badge variant="secondary" className="text-xs">已落車</Badge>
+          ) : (
+            <Badge variant="warning" className="text-xs">未打卡</Badge>
+          )}
+          {canCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700"
+              aria-label="取消此筆打卡"
+              title="取消打卡 (僅限管理員)"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
         {timestamp ? (
           <span className="flex items-center gap-1 text-xs font-mono text-slate-500">
             <Clock className="h-3 w-3" /> {formatTime(timestamp)}
