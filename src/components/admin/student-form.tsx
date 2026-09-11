@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MediaUpload } from "@/components/ui/media-upload";
 import { useToast } from "@/components/ui/toast-context";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase";
 import type { Bus } from "@/lib/types";
@@ -19,7 +20,7 @@ export function StudentForm({ buses }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState("");
   const [studentNo, setStudentNo] = useState("");
-  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>("");
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("+852");
   const [busId, setBusId] = useState<string>(buses[0]?.id ?? "");
@@ -96,11 +97,11 @@ export function StudentForm({ buses }: Props) {
       <Field label="學號 *">
         <Input value={studentNo} onChange={(e) => setStudentNo(e.target.value)} placeholder="例如：STU2026002" />
       </Field>
-      <Field label="照片 URL">
-        <Input
+      <Field label="照片">
+        <MediaUpload
           value={photoUrl}
-          onChange={(e) => setPhotoUrl(e.target.value)}
-          placeholder="https://… (選填)"
+          onChange={setPhotoUrl}
+          disabled={submitting}
         />
       </Field>
       <Field label="家長姓名 *">

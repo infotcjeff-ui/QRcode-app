@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast-context";
+import { MediaUpload } from "@/components/ui/media-upload";
 import type { Bus, Student } from "@/lib/types";
 import { Loader2, Pencil } from "lucide-react";
 
@@ -30,7 +31,7 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
 
   const [name, setName] = useState(student.name);
   const [studentNo, setStudentNo] = useState(student.student_no);
-  const [photoUrl, setPhotoUrl] = useState(student.photo_url ?? "");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(student.photo_url ?? null);
   const [parentName, setParentName] = useState(student.parent_name);
   const [parentPhone, setParentPhone] = useState(student.parent_phone);
   const [busId, setBusId] = useState<string>(student.assigned_bus_id ?? "");
@@ -39,7 +40,7 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
     if (next) {
       setName(student.name);
       setStudentNo(student.student_no);
-      setPhotoUrl(student.photo_url ?? "");
+      setPhotoUrl(student.photo_url ?? null);
       setParentName(student.parent_name);
       setParentPhone(student.parent_phone);
       setBusId(student.assigned_bus_id ?? "");
@@ -139,8 +140,12 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
             <Input value={studentNo} onChange={(e) => setStudentNo(e.target.value)} placeholder="例如：STU2026002" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-600">照片 URL</label>
-            <Input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://… (選填)" />
+            <label className="text-xs font-medium text-slate-600">照片</label>
+            <MediaUpload
+              value={photoUrl}
+              onChange={setPhotoUrl}
+              disabled={submitting}
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">家長姓名 *</label>

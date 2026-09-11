@@ -314,7 +314,7 @@ export function ScanDashboardClient({
   }
 
   return (
-    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset">
+    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset pb-24">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -686,37 +686,37 @@ function StudentRow({
 }) {
   const name = student?.name ?? "未知學生";
   return (
-    <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-2 text-xs">
-      <Avatar className="h-8 w-8">
-        {student?.photo_url ? <AvatarImage src={student.photo_url} alt={name} /> : null}
+    <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
+      <Avatar className="h-10 w-10">
+        {student?.photo_url ? <AvatarImage src={student.photo_url} alt={name} className="object-cover" /> : null}
         <AvatarFallback>{name.slice(0, 1)}</AvatarFallback>
       </Avatar>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-800">{name}</span>
+          <span className="text-base font-semibold text-slate-800">{name}</span>
           {student?.student_no ? (
-            <span className="text-[10px] text-slate-400">{student.student_no}</span>
+            <span className="text-xs text-slate-400">{student.student_no}</span>
           ) : null}
         </div>
         {location ? (
-          <p className="flex items-center gap-1 text-[10px] text-slate-500">
-            <MapPin className="h-2.5 w-2.5" /> {location}
+          <p className="flex items-center gap-1 text-xs text-slate-500">
+            <MapPin className="h-3 w-3" /> {location}
           </p>
         ) : (
-          <p className="text-[10px] text-slate-400">未提供地點</p>
+          <p className="text-xs text-slate-400">未提供地點</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-0.5">
         {variant === "success" ? (
-          <Badge variant="success" className="text-[10px]">已上車</Badge>
+          <Badge variant="success" className="text-xs">已上車</Badge>
         ) : variant === "info" ? (
-          <Badge variant="secondary" className="text-[10px]">已落車</Badge>
+          <Badge variant="secondary" className="text-xs">已落車</Badge>
         ) : (
-          <Badge variant="warning" className="text-[10px]">未打卡</Badge>
+          <Badge variant="warning" className="text-xs">未打卡</Badge>
         )}
         {timestamp ? (
-          <span className="flex items-center gap-1 text-[10px] font-mono text-slate-500">
-            <Clock className="h-2.5 w-2.5" /> {formatTime(timestamp)}
+          <span className="flex items-center gap-1 text-xs font-mono text-slate-500">
+            <Clock className="h-3 w-3" /> {formatTime(timestamp)}
           </span>
         ) : null}
       </div>
