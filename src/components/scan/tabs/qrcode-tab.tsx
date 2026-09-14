@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type {
   Bus,
@@ -16,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { BackButton } from "@/components/ui/back-button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -27,12 +25,12 @@ import {
 import {
   Bus as BusIcon,
   CheckCircle2,
+  CheckCircle,
   Loader2,
   MapPin,
   Radio,
   Users,
   XCircle,
-  CheckCircle,
   X,
   Info,
   Route as RouteIcon,
@@ -42,13 +40,12 @@ import {
   Compass,
   Trash2,
   ShieldCheck,
-  Zap,
-  ZapOff,
+  Users as UsersIcon,
 } from "lucide-react";
 import { QrScanner } from "@/components/scan/qr-scanner";
 import { useToast } from "@/components/ui/toast-context";
 import { formatTime, isValidUuid } from "@/lib/utils";
-import { getAuthUser, isAdmin } from "@/lib/auth";
+import { isAdmin, type AuthUser } from "@/lib/auth";
 import { useGeolocation } from "@/lib/use-geolocation";
 
 type Props = {
@@ -58,6 +55,21 @@ type Props = {
   initialStudents: Student[];
   initialLogs: CheckLogWithStudent[];
   supabaseConfigured: boolean;
+  /** 父層傳入的 auth user，用於判斷是否為 admin */
+  authUser: AuthUser | null;
+  /** Realtime 是否已連線 (用於顯示狀態) */
+  realtimeStatus: "idle" | "connecting" | "connected" | "error";
+  /** 即時新加入的 log id 集合 (高亮用) */
+  recentlyAddedLogIds: Set<string>;
+  /** 上 / 落車地點 (與「點名」分頁共用) */
+  pickupPoint: string;
+  onPickupPointChange: (v: string) => void;
+  dropoffPoint: string;
+  onDropoffPointChange: (v: string) => void;
+  /** Realtime 新增 log 時呼叫 (供 QrCodeTab 同步) */
+  onLogInsert?: (log: CheckLog, student: Student | null) => void;
+  /** Realtime 刪除 log 時呼叫 */
+  onLogDelete?: (logId: string) => void;
 };
 
 type PendingScan = {
@@ -65,54 +77,49 @@ type PendingScan = {
   student: Student;
 };
 
-const DEFAULT_PICKUP = "沙田A線 · 首站";
+const DEFAULT_QR_PICKUP = "沙田A線 · 首站";
 const DEFAULT_DROPOFF = "學校";
 
-export function ScanDashboardClient({
+/**
+ * QR Code 分頁：
+ *  - 等同於舊 /scan 頁面內的所有 section (上落車掃瞄 + 本次資訊)
+ */
+export function QrCodeTab({
   attendant,
   trip,
   bus,
   initialStudents,
   initialLogs,
   supabaseConfigured,
+  authUser,
+  realtimeStatus: _realtimeStatus,
+  recentlyAddedLogIds,
+  pickupPoint,
+  onPickupPointChange,
+  dropoffPoint,
+  onDropoffPointChange,
+  onLogInsert,
+  onLogDelete,
 }: Props) {
-  const router = useRouter();
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [logs, setLogs] = useState<CheckLogWithStudent[]>(initialLogs);
-  const [mainTab, setMainTab] = useState<"scan" | "info">("scan");
   const [scanTab, setScanTab] = useState<CheckLogType>("ON");
   const [submitting, setSubmitting] = useState(false);
   const [tabSwitching, setTabSwitching] = useState(false);
   const [isInsecureContext, setIsInsecureContext] = useState(false);
-  const [pickupPoint, setPickupPoint] = useState<string>(DEFAULT_PICKUP);
-  const [dropoffPoint, setDropoffPoint] = useState<string>(DEFAULT_DROPOFF);
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [authUser, setAuthUser] = useState<ReturnType<typeof getAuthUser>>(null);
-  // 取消打卡 Dialog 狀態 (僅 admin 可見)
+  // 取消打卡 Dialog
   const [cancelTarget, setCancelTarget] = useState<CheckLogWithStudent | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
-  // Realtime 連線狀態 (用於 UI 顯示)
-  const [realtimeStatus, setRealtimeStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
-  // 最近新增的打卡 ID 集合 (用於高亮動畫)
-  const [recentlyAddedLogIds, setRecentlyAddedLogIds] = useState<Set<string>>(() => new Set());
-
   const geo = useGeolocation({ watchIntervalMs: 30000 });
 
-  // 確保使用者已登入（所有已登入的使用者皆可使用掃描功能）。
+  // 同步來自父層 realtime 事件
   useEffect(() => {
-    const u = getAuthUser();
-    setAuthUser(u);
-    setAuthChecked(true);
-    if (!u) {
-      router.replace("/login?role=attendant");
-      return;
-    }
-    // 不再限制角色，所有已登入使用者皆可進入。
-  }, [router]);
+    setLogs(initialLogs);
+  }, [initialLogs]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -129,52 +136,12 @@ export function ScanDashboardClient({
     return map;
   }, [students]);
 
-  // 用 ref 保存最新的 studentsById，避免 realtime useEffect 反覆重訂閱
-  const studentsByIdRef = useRef<Map<string, Student>>(studentsById);
-  useEffect(() => {
-    studentsByIdRef.current = studentsById;
-  }, [studentsById]);
-
-  const flashNewLog = useCallback((logId: string) => {
-    setRecentlyAddedLogIds((prev) => {
-      const next = new Set(prev);
-      next.add(logId);
-      return next;
-    });
-    setTimeout(() => {
-      setRecentlyAddedLogIds((prev) => {
-        if (!prev.has(logId)) return prev;
-        const next = new Set(prev);
-        next.delete(logId);
-        return next;
-      });
-    }, 2500);
-  }, []);
-
-  const logsForType = useMemo(
-    () => logs.filter((l) => l.type === scanTab).sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-    [logs, scanTab]
-  );
-
-  const recentLocations = useMemo(() => {
-    const map = new Map<string, { name: string; time: string }>();
-    logs.forEach((l) => {
-      const key = (l.location_name ?? "").trim();
-      if (!key) return;
-      if (!map.has(key)) {
-        map.set(key, { name: key, time: l.timestamp });
-      }
-    });
-    return Array.from(map.values()).sort((a, b) => b.time.localeCompare(a.time)).slice(0, 6);
-  }, [logs]);
-
+  // Realtime 訂閱
   useEffect(() => {
     if (!supabaseConfigured) return;
 
-    setRealtimeStatus("connecting");
-
     const channel = supabase
-      .channel(`scan-dashboard-${trip.id}`)
+      .channel(`qrcode-tab-${trip.id}`)
       .on(
         "postgres_changes",
         {
@@ -185,7 +152,7 @@ export function ScanDashboardClient({
         },
         async (payload) => {
           const newRow = payload.new as CheckLog;
-          let student: Student | null = studentsByIdRef.current.get(newRow.student_id) ?? null;
+          let student: Student | null = studentsById.get(newRow.student_id) ?? null;
           if (!student) {
             const { data } = await supabase
               .from("students")
@@ -203,7 +170,7 @@ export function ScanDashboardClient({
             if (prev.find((l) => l.id === newRow.id)) return prev;
             return [{ ...newRow, student }, ...prev];
           });
-          flashNewLog(newRow.id);
+          onLogInsert?.(newRow, student);
         }
       )
       .on(
@@ -233,23 +200,16 @@ export function ScanDashboardClient({
           const oldRow = payload.old as { id?: string } | null;
           if (!oldRow?.id) return;
           setLogs((prev) => prev.filter((l) => l.id !== oldRow.id));
+          onLogDelete?.(oldRow.id);
         }
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setRealtimeStatus("connected");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          setRealtimeStatus("error");
-        } else {
-          setRealtimeStatus("connecting");
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      setRealtimeStatus("idle");
     };
-  }, [supabaseConfigured, trip.id, flashNewLog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabaseConfigured, trip.id]);
 
   const confirmScan = useCallback(async () => {
     if (!pendingScan || submitting) return;
@@ -301,7 +261,7 @@ export function ScanDashboardClient({
         if (prev.find((l) => l.id === enriched.id)) return prev;
         return [enriched, ...prev];
       });
-      flashNewLog(enriched.id);
+      onLogInsert?.(enriched, student);
 
       toast({
         title: scanTab === "ON" ? "✅ 上車打卡成功" : "✅ 落車打卡成功",
@@ -320,7 +280,7 @@ export function ScanDashboardClient({
     } finally {
       setSubmitting(false);
     }
-  }, [pendingScan, submitting, scanTab, trip.id, pickupPoint, toast]);
+  }, [pendingScan, submitting, scanTab, trip.id, pickupPoint, toast, onLogInsert]);
 
   const handleScan = useCallback(
     (decodedText: string) => {
@@ -383,7 +343,6 @@ export function ScanDashboardClient({
     [studentsById, logs, scanTab, toast]
   );
 
-  // ── 取消打卡：僅 admin 可用 ──
   const requestCancel = useCallback((log: CheckLogWithStudent) => {
     if (!isAdminUser) return;
     setCancelTarget(log);
@@ -439,8 +398,8 @@ export function ScanDashboardClient({
         return;
       }
 
-      // 從本地 state 移除紀錄 (學生可重新掃瞄)
       setLogs((prev) => prev.filter((l) => l.id !== cancelTarget.id));
+      onLogDelete?.(cancelTarget.id);
 
       const studentName = cancelTarget.student?.name ?? "學生";
       const actionLabel = cancelTarget.type === "ON" ? "上車" : "落車";
@@ -462,21 +421,25 @@ export function ScanDashboardClient({
     } finally {
       setCancelSubmitting(false);
     }
-  }, [cancelTarget, cancelSubmitting, cancelReason, authUser, isAdminUser, toast]);
+  }, [cancelTarget, cancelSubmitting, cancelReason, authUser, isAdminUser, toast, onLogDelete]);
 
   const totalOn = logs.filter((l) => l.type === "ON").length;
   const totalOff = logs.filter((l) => l.type === "OFF").length;
 
-  if (!authChecked) {
-    return (
-      <main className="flex w-full items-center justify-center bg-slate-50">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-      </main>
-    );
-  }
+  const recentLocations = useMemo(() => {
+    const map = new Map<string, { name: string; time: string }>();
+    logs.forEach((l) => {
+      const key = (l.location_name ?? "").trim();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { name: key, time: l.timestamp });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.time.localeCompare(a.time)).slice(0, 6);
+  }, [logs]);
 
   return (
-    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset pb-24">
+    <div className="space-y-3">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -505,7 +468,7 @@ export function ScanDashboardClient({
 
           <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm">
             <div className="flex items-center gap-2 text-slate-600">
-              <Users className="h-4 w-4 text-slate-400" />
+              <UsersIcon className="h-4 w-4 text-slate-400" />
               <span className="text-xs">家長：{pendingScan?.student.parent_name ?? "未填寫"}</span>
             </div>
             <div className="flex items-center gap-2 text-slate-600">
@@ -555,7 +518,7 @@ export function ScanDashboardClient({
         </DialogContent>
       </Dialog>
 
-      {/* ── 取消打卡 Dialog (僅 admin 可觸發) ── */}
+      {/* ── 取消打卡 Dialog ── */}
       <Dialog
         open={!!cancelTarget}
         onOpenChange={(open) => {
@@ -657,115 +620,95 @@ export function ScanDashboardClient({
         </DialogContent>
       </Dialog>
 
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-20 flex items-center justify-between rounded-xl bg-slate-900 px-3 py-3 text-white shadow-md">
-        <div className="flex items-center gap-2">
-          <BackButton
-            parent="/system-setting"
-            fallback="/system-setting"
-            label=""
-            iconOnly
-            variant="ghost"
-            className="text-white hover:bg-slate-700 hover:text-white"
-          />
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">{authUser?.name ?? attendant.name}</span>
-            <span className="flex items-center gap-1 text-[11px] text-slate-300">
-              <BusIcon className="h-3 w-3" />
-              {bus.plate_number} · {bus.route_name}
+      {/* ── 上落車打卡 Section ── */}
+      <Tabs defaultValue="scan" className="flex w-full flex-col">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="scan" className="text-sm">
+            <BusIcon className="mr-1.5 h-4 w-4" />
+            上落車打卡
+          </TabsTrigger>
+          <TabsTrigger value="info" className="text-sm">
+            <Info className="mr-1.5 h-4 w-4" />
+            本次資訊
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="scan" className="mt-3 space-y-3">
+          {/* Switch Button */}
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+            <span className={`text-sm font-medium ${scanTab === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
+              上車打卡
+            </span>
+            <button
+              onClick={() => {
+                setTabSwitching(true);
+                setScanTab(scanTab === "ON" ? "OFF" : "ON");
+                setTimeout(() => setTabSwitching(false), 300);
+              }}
+              className={`relative flex h-7 w-14 items-center rounded-full px-1 transition-colors ${
+                scanTab === "OFF" ? "bg-emerald-500" : "bg-slate-300"
+              }`}
+            >
+              <span
+                className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  scanTab === "OFF" ? "translate-x-7" : "translate-x-1"
+                }`}
+              />
+            </button>
+            <span className={`text-sm font-medium ${scanTab === "OFF" ? "text-emerald-600" : "text-slate-400"}`}>
+              落車打卡
             </span>
           </div>
-        </div>
-        {/* Realtime 連線狀態指示 */}
-        <RealtimeBadge status={realtimeStatus} />
-      </header>
 
-      {/* ── Main Tabs ── */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <Tabs
-          value={mainTab}
-          onValueChange={(v) => setMainTab(v as "scan" | "info")}
-          className="flex flex-col"
-        >
-          <TabsList className="grid w-full grid-cols-2 shrink-0">
-            <TabsTrigger value="scan" className="text-sm">
-              <BusIcon className="mr-1.5 h-4 w-4" />
-              上落車打卡
-            </TabsTrigger>
-            <TabsTrigger value="info" className="text-sm">
-              <Info className="mr-1.5 h-4 w-4" />
-              本次資訊
-            </TabsTrigger>
-          </TabsList>
+          {/* QR Scanner */}
+          {tabSwitching ? (
+            <TabSkeleton />
+          ) : (
+            <QrScanner onScan={handleScan} />
+          )}
 
-          {/* ── 上落車打卡 Tab ── */}
-          <TabsContent value="scan" className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0">
-            {/* Switch Button */}
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
-              <span className={`text-sm font-medium ${scanTab === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
-                上車打卡
-              </span>
-              <button
-                onClick={() => {
-                  setTabSwitching(true);
-                  setScanTab(scanTab === "ON" ? "OFF" : "ON");
-                  setTimeout(() => setTabSwitching(false), 300);
-                }}
-                className={`relative flex h-7 w-14 items-center rounded-full px-1 transition-colors ${
-                  scanTab === "OFF" ? "bg-emerald-500" : "bg-slate-300"
-                }`}
-              >
-                <span
-                  className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    scanTab === "OFF" ? "translate-x-7" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span className={`text-sm font-medium ${scanTab === "OFF" ? "text-emerald-600" : "text-slate-400"}`}>
-                落車打卡
-              </span>
-            </div>
-
-            {/* QR Scanner */}
-            {tabSwitching ? (
-              <TabSkeleton />
-            ) : (
-              <QrScanner onScan={handleScan} />
-            )}
-
-            {/* 已完成上車掃瞄 / 落車掃瞄 */}
-            <Section
-              icon={scanTab === "ON" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CheckCircle className="h-4 w-4 text-sky-600" />}
-              title={scanTab === "ON" ? `已完成上車掃瞄 (${totalOn}/${students.length})` : `已完成落車掃瞄 (${totalOff}/${students.length})`}
-            >
-              {logs.filter((l) => l.type === scanTab).length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
-                  {scanTab === "ON" ? "尚未有學生上車" : "尚未有學生落車"}
-                </div>
+          {/* 已完成上車 / 落車掃瞄 */}
+          <Section
+            icon={
+              scanTab === "ON" ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               ) : (
-                <div className="space-y-1.5">
-                  {logs
-                    .filter((l) => l.type === scanTab)
-                    .map((log) => (
-                      <StudentRow
-                        key={log.id}
-                        student={log.student}
-                        location={log.location_name}
-                        variant={scanTab === "ON" ? "success" : "info"}
-                        timestamp={log.timestamp}
-                        showCancelButton={isAdminUser}
-                        onCancel={() => requestCancel(log)}
-                        highlight={recentlyAddedLogIds.has(log.id)}
-                      />
-                    ))}
-                </div>
-              )}
-            </Section>
-          </TabsContent>
+                <CheckCircle className="h-4 w-4 text-sky-600" />
+              )
+            }
+            title={
+              scanTab === "ON"
+                ? `已完成上車掃瞄 (${totalOn}/${students.length})`
+                : `已完成落車掃瞄 (${totalOff}/${students.length})`
+            }
+          >
+            {logs.filter((l) => l.type === scanTab).length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
+                {scanTab === "ON" ? "尚未有學生上車" : "尚未有學生落車"}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {logs
+                  .filter((l) => l.type === scanTab)
+                  .map((log) => (
+                    <StudentRow
+                      key={log.id}
+                      student={log.student}
+                      location={log.location_name}
+                      variant={scanTab === "ON" ? "success" : "info"}
+                      timestamp={log.timestamp}
+                      showCancelButton={isAdminUser}
+                      onCancel={() => requestCancel(log)}
+                      highlight={recentlyAddedLogIds.has(log.id)}
+                    />
+                  ))}
+              </div>
+            )}
+          </Section>
+        </TabsContent>
 
-          {/* ── 本次資訊 Tab ── */}
-          <TabsContent value="info" className="mt-3 space-y-4 overflow-y-auto flex-1 min-h-0 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400">
-          {/* ── 即時 Google Map ── */}
+        <TabsContent value="info" className="mt-3 space-y-3">
+          {/* 即時 Google Map */}
           <Section
             icon={<MapIcon className="h-4 w-4 text-emerald-600" />}
             title="即時 Google Map 位置"
@@ -803,7 +746,7 @@ export function ScanDashboardClient({
             </div>
           </Section>
 
-          {/* ── 本班次資訊 ── */}
+          {/* 本班次資訊 */}
           <Section
             icon={<Info className="h-4 w-4 text-sky-600" />}
             title="本班次資訊"
@@ -818,7 +761,7 @@ export function ScanDashboardClient({
             </div>
           </Section>
 
-          {/* ── 上落車點 ── */}
+          {/* 上落車點 */}
           <Section
             icon={<MapPin className="h-4 w-4 text-amber-600" />}
             title="上落車點"
@@ -830,7 +773,7 @@ export function ScanDashboardClient({
                 </label>
                 <input
                   value={pickupPoint}
-                  onChange={(e) => setPickupPoint(e.target.value)}
+                  onChange={(e) => onPickupPointChange(e.target.value)}
                   placeholder="例如：沙田A線 · 首站"
                   className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
@@ -841,7 +784,7 @@ export function ScanDashboardClient({
                 </label>
                 <input
                   value={dropoffPoint}
-                  onChange={(e) => setDropoffPoint(e.target.value)}
+                  onChange={(e) => onDropoffPointChange(e.target.value)}
                   placeholder="例如：學校"
                   className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
@@ -855,7 +798,7 @@ export function ScanDashboardClient({
                     {recentLocations.map((loc) => (
                       <button
                         key={loc.name}
-                        onClick={() => setPickupPoint(loc.name)}
+                        onClick={() => onPickupPointChange(loc.name)}
                         className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600 transition-colors hover:bg-slate-100"
                       >
                         <MapPin className="h-2.5 w-2.5" /> {loc.name}
@@ -867,7 +810,7 @@ export function ScanDashboardClient({
             </div>
           </Section>
 
-          {/* ── 未上車學生 ── */}
+          {/* 未上車學生 */}
           <Section
             icon={<XCircle className="h-4 w-4 text-amber-600" />}
             title={`未上車學生 (${students.length - totalOn})`}
@@ -894,9 +837,8 @@ export function ScanDashboardClient({
             })()}
           </Section>
         </TabsContent>
-        </Tabs>
-      </div>
-    </main>
+      </Tabs>
+    </div>
   );
 }
 
@@ -962,7 +904,6 @@ function StudentRow({
   const name = student?.name ?? "未知學生";
   const canCancel = showCancelButton && !!onCancel && variant !== "warning";
 
-  // 動態 className：高亮時加 ring + 動畫
   const rowClass = [
     "flex items-center gap-3 rounded-md border p-3 text-sm transition-all duration-500",
     highlight
@@ -1038,43 +979,4 @@ function TabSkeleton() {
       <div className="h-10 rounded-lg bg-slate-200" />
     </div>
   );
-}
-
-/* ── Realtime 連線狀態指示 ── */
-function RealtimeBadge({
-  status,
-}: {
-  status: "idle" | "connecting" | "connected" | "error";
-}) {
-  if (status === "connected") {
-    return (
-      <span
-        title="Realtime 已連線，新打卡會自動即時更新"
-        className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300 ring-1 ring-emerald-400/40"
-      >
-        <Zap className="h-3 w-3 animate-pulse" /> 即時
-      </span>
-    );
-  }
-  if (status === "connecting") {
-    return (
-      <span
-        title="正在連線到 Realtime…"
-        className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200 ring-1 ring-amber-400/40"
-      >
-        <Loader2 className="h-3 w-3 animate-spin" /> 連線中
-      </span>
-    );
-  }
-  if (status === "error") {
-    return (
-      <span
-        title="Realtime 連線失敗，請重新整理頁面"
-        className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-medium text-rose-200 ring-1 ring-rose-400/40"
-      >
-        <ZapOff className="h-3 w-3" /> 連線失敗
-      </span>
-    );
-  }
-  return null;
 }

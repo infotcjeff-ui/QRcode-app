@@ -1,139 +1,240 @@
-import Link from "next/link";
-import { ArrowLeft, ArrowRight, BarChart3, Bus, GraduationCap, QrCode, ShieldCheck, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BackButton } from "@/components/ui/back-button";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const metadata = {
-  title: "系統設定 · 校巴安全打卡系統",
-};
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
+import {
+  BarChart3,
+  Bus,
+  ChartPie,
+  ChevronRight,
+  Cog,
+  Database,
+  Globe,
+  GraduationCap,
+  QrCode,
+  ShieldCheck,
+  UserCog,
+  Users,
+} from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SettingsGroup, SettingsItem } from "@/components/ui/settings-group";
+import {
+  SITE_PUBLIC_ENABLED_KEY,
+  SITE_PASSWORD_OVERRIDE_KEY,
+} from "@/lib/site-settings";
+import { getAuthUser, ROLE_LABEL, type AuthUser } from "@/lib/auth";
+import i18n from "@/lib/i18n";
 
-type RoleLink = {
+type MenuEntry = {
   href: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  subtitleKey: string;
   icon: React.ReactNode;
-  badge: string;
-  tone: "default" | "success" | "warning";
+  groupKey: string;
 };
 
-const ROLES: RoleLink[] = [
-  {
-    href: "/system-setting/admin",
-    title: "管理員控制台",
-    description: "查看全校路線、班次實時狀態、學生出勤紀錄與 WhatsApp 通知進度。",
-    icon: <ShieldCheck className="h-8 w-8" />,
-    badge: "Admin",
-    tone: "default",
-  },
+const ENTRIES: MenuEntry[] = [
   {
     href: "/system-setting/admin/buses",
-    title: "校巴資料管理",
-    description: "新增 / 修改 / 刪除校巴車牌、路線與載客量，並同步寫入 Supabase。",
-    icon: <Bus className="h-8 w-8" />,
-    badge: "Buses",
-    tone: "warning",
-  },
-  {
-    href: "/system-setting/admin/students",
-    title: "學生管理",
-    description: "新增 / 刪除學生資料，產生 QR Code，取得家長追蹤連結。",
-    icon: <GraduationCap className="h-8 w-8" />,
-    badge: "CRUD",
-    tone: "default",
+    titleKey: "system.busData",
+    subtitleKey: "system.busDataDesc",
+    icon: <Bus className="h-4 w-4" />,
+    groupKey: "system.busManagement",
   },
   {
     href: "/system-setting/admin/qr-codes",
-    title: "QR Code 批次產生",
-    description: "批次產生全部學生 QR Code，支援列印或下載 PNG 圖檔。",
-    icon: <QrCode className="h-8 w-8" />,
-    badge: "Print",
-    tone: "warning",
+    titleKey: "system.qrCodes",
+    subtitleKey: "system.qrCodesDesc",
+    icon: <QrCode className="h-4 w-4" />,
+    groupKey: "system.busManagement",
   },
   {
-    href: "/system-setting/admin/statistics",
-    title: "統計表",
-    description: "依打卡資料即時彙整班次統計、上落車率、路線比較等進階報表。",
-    icon: <BarChart3 className="h-8 w-8" />,
-    badge: "Reports",
-    tone: "success",
-  },
-  {
-    href: "/scan",
-    title: "打卡系統",
-    description: "Mobile-first 介面，使用後置鏡頭掃描學生 QR Code，即時上傳打卡紀錄。",
-    icon: <Bus className="h-8 w-8" />,
-    badge: "Scan",
-    tone: "warning",
+    href: "/system-setting/admin/students",
+    titleKey: "system.studentMgmt",
+    subtitleKey: "system.studentMgmtDesc",
+    icon: <GraduationCap className="h-4 w-4" />,
+    groupKey: "system.studentManagement",
   },
   {
     href: "/student",
-    title: "家長即時追蹤",
-    description: "輸入子女 STU No 搜尋後，查看最新上下車狀態與即時通知。",
-    icon: <Users className="h-8 w-8" />,
-    badge: "Parent",
-    tone: "success",
+    titleKey: "system.parentTracking",
+    subtitleKey: "system.parentTrackingDesc",
+    icon: <Users className="h-4 w-4" />,
+    groupKey: "system.studentManagement",
+  },
+  {
+    href: "/system-setting/admin/statistics",
+    titleKey: "system.statistics",
+    subtitleKey: "system.statisticsDesc",
+    icon: <BarChart3 className="h-4 w-4" />,
+    groupKey: "system.reportAnalysis",
+  },
+  {
+    href: "/system-setting/admin",
+    titleKey: "system.adminConsole",
+    subtitleKey: "system.adminConsoleDesc",
+    icon: <ChartPie className="h-4 w-4" />,
+    groupKey: "system.reportAnalysis",
+  },
+  {
+    href: "/system-setting/admin/site-settings",
+    titleKey: "system.siteSettings",
+    subtitleKey: "system.siteSettingsDesc",
+    icon: <Globe className="h-4 w-4" />,
+    groupKey: "system.siteAndUsers",
+  },
+  {
+    href: "/system-setting/admin/users",
+    titleKey: "system.adminUsers",
+    subtitleKey: "system.adminUsersDesc",
+    icon: <UserCog className="h-4 w-4" />,
+    groupKey: "system.siteAndUsers",
   },
 ];
 
+const GROUPS_ORDER: MenuEntry["groupKey"][] = [
+  "system.busManagement",
+  "system.studentManagement",
+  "system.reportAnalysis",
+  "system.siteAndUsers",
+];
+
 export default function SystemSettingPage() {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [sitePublic, setSitePublic] = useState<boolean>(false);
+  const [hasCustomPassword, setHasCustomPassword] = useState<boolean>(false);
+  const [ready, setReady] = useState(false);
+  const [langKey, setLangKey] = useState(0);
+
+  useEffect(() => {
+    const u = getAuthUser();
+    if (!u || u.role !== "admin") {
+      router.replace("/lock");
+      return;
+    }
+    setUser(u);
+
+    try {
+      setSitePublic(window.localStorage.getItem(SITE_PUBLIC_ENABLED_KEY) === "1");
+      setHasCustomPassword(!!window.localStorage.getItem(SITE_PASSWORD_OVERRIDE_KEY));
+    } catch {
+      /* ignore */
+    }
+
+    const sync = () => {
+      try {
+        setSitePublic(window.localStorage.getItem(SITE_PUBLIC_ENABLED_KEY) === "1");
+        setHasCustomPassword(!!window.localStorage.getItem(SITE_PASSWORD_OVERRIDE_KEY));
+      } catch {
+        /* ignore */
+      }
+    };
+
+    window.addEventListener("bus-site-settings-changed", sync);
+    window.addEventListener("storage", sync);
+    setReady(true);
+
+    return () => {
+      window.removeEventListener("bus-site-settings-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [router]);
+
+  // 監聽 i18n 語言變化（reload 前短暫渲染新語言）
+  useEffect(() => {
+    const handler = () => setLangKey((k) => k + 1);
+    i18n.on("languageChanged", handler);
+    return () => {
+      i18n.off("languageChanged", handler);
+    };
+  }, []);
+
+  if (!ready || !user) {
+    return (
+      <main className="flex w-full items-center justify-center bg-slate-50 text-slate-500">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
+      </main>
+    );
+  }
+
+  const byGroup = GROUPS_ORDER.map((g) => ({
+    groupKey: g,
+    items: ENTRIES.filter((e) => e.groupKey === g),
+  }));
+
   return (
-    <main className="flex w-full max-w-full flex-col gap-8 overflow-auto px-4 py-10 sm:px-6 lg:px-8 scrollbar-inset">
-      <header className="flex items-center justify-center gap-2 sm:justify-between">
-        <BackButton parent="/profile" fallback="/profile" className="hidden sm:inline-flex" />
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
-            <Bus className="h-5 w-5" />
-          </span>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            系統設定
-          </h1>
-        </div>
-        <div className="hidden sm:block sm:w-[88px]" aria-hidden />
-      </header>
+    <main className="relative flex w-full flex-col bg-slate-50" key={langKey}>
+      {/* Header 全幅 */}
+      <PageHeader title={t("system.title")} onBack={() => router.push("/profile")} />
 
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-slate-700 sm:text-lg">功能入口</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ROLES.map((role) => (
-            <Card
-              key={role.href}
-              className="group flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-md"
-            >
-              <CardHeader>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="rounded-lg bg-slate-100 p-2 text-slate-700 group-hover:bg-slate-900 group-hover:text-white">
-                    {role.icon}
-                  </div>
-                  <Badge variant={role.tone}>{role.badge}</Badge>
-                </div>
-                <CardTitle className="text-xl">{role.title}</CardTitle>
-                <CardDescription className="min-h-[3rem] text-sm">
-                  {role.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild className="w-full">
-                  <Link href={role.href}>
-                    進入
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+        <div className="flex flex-1 flex-col gap-5 pb-28 pt-5">
+          {/* 站台狀態摘要 */}
+          <SettingsGroup
+            title={t("system.siteStatus")}
+            description={t("system.siteStatusDesc")}
+          >
+            <SettingsItem
+              icon={<Globe className="h-4 w-4" />}
+              title={t("system.sitePublicMode")}
+              subtitle={sitePublic ? t("system.sitePublicOn") : t("system.sitePublicOff")}
+              trailing={
+                <span
+                  className={
+                    "rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                    (sitePublic
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-slate-100 text-slate-600")
+                  }
+                >
+                  {sitePublic ? "ON" : "OFF"}
+                </span>
+              }
+              href="/system-setting/admin/site-settings"
+            />
+            <SettingsItem
+              icon={<Database className="h-4 w-4" />}
+              title={t("system.sitePassword")}
+              subtitle={
+                hasCustomPassword
+                  ? t("system.sitePasswordCustom")
+                  : t("system.sitePasswordDefault")
+              }
+              trailing={
+                <span className="flex items-center gap-1 text-[12px] text-slate-500">
+                  {hasCustomPassword
+                    ? t("system.sitePasswordCustomLabel")
+                    : t("system.sitePasswordDefaultLabel")}
+                  <ChevronRight className="h-4 w-4 text-slate-300" />
+                </span>
+              }
+              href="/system-setting/admin/site-settings"
+            />
+          </SettingsGroup>
+
+          {/* 功能分組 */}
+          {byGroup.map(({ groupKey, items }) => (
+            <SettingsGroup key={groupKey} title={t(groupKey)}>
+              {items.map((it) => (
+                <SettingsItem
+                  key={it.href}
+                  icon={it.icon}
+                  title={t(it.titleKey)}
+                  subtitle={t(it.subtitleKey)}
+                  href={it.href}
+                />
+              ))}
+            </SettingsGroup>
           ))}
-        </div>
-      </section>
 
-      <footer className="mt-auto rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">
-        <p>
-          <Link href="/profile" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
-            <ArrowLeft className="h-3 w-3" /> 前往個人資料頁
-          </Link>
-        </p>
-      </footer>
+          <p className="mt-2 text-center text-[11px] text-slate-400">
+            {t("system.footer")}
+          </p>
+        </div>
+      </div>
     </main>
   );
 }

@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-context";
 import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download } from "lucide-react";
-import { BackButton } from "@/components/ui/back-button";
 import { DeleteStudentButton } from "@/components/admin/delete-student-button";
 import { EditStudentDialog } from "@/components/admin/edit-student-dialog";
 import type { Bus, Student } from "@/lib/types";
@@ -185,7 +184,19 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 overflow-auto px-4 py-6 sm:px-6 lg:px-8 scrollbar-inset">
+    <div className="flex w-full flex-col gap-6 overflow-auto scrollbar-inset">
+      {/* 動作列：批次 QR Code / 新增學生 */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/system-setting/admin/qr-codes">
+            <QrIcon className="mr-2 h-4 w-4" /> 批次 QR Code
+          </Link>
+        </Button>
+        <Button onClick={() => setShowAddForm((v) => !v)} variant="default" size="sm">
+          {showAddForm ? "取消新增" : "+ 新增學生"}
+        </Button>
+      </div>
+
       {/* ── QR Preview (shown after successful creation) ── */}
       {newStudent && qrPreview ? (
         <Card className="border-emerald-300 bg-emerald-50">
@@ -240,25 +251,10 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
         </Card>
       ) : null}
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-3xl">
-            <GraduationCap className="h-6 w-6" /> 學生管理
-          </h1>
-          <p className="text-sm text-slate-500">新增、查看、刪除學生資料，並取得家長追蹤連結</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/system-setting/admin/qr-codes">
-              <QrIcon className="mr-2 h-4 w-4" /> 批次 QR Code
-            </Link>
-          </Button>
-          <Button onClick={() => setShowAddForm((v) => !v)} variant="default" size="sm">
-            {showAddForm ? "取消新增" : "+ 新增學生"}
-          </Button>
-          <BackButton href="/system-setting/admin" label="返回後台" variant="outline" />
-        </div>
-      </header>
+      {/* 說明列 */}
+      <p className="text-sm text-slate-500">
+        新增、查看、刪除學生資料，並取得家長追蹤連結
+      </p>
 
       {/* ── Add Student Form ── */}
       {showAddForm ? (
@@ -383,7 +379,7 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }
 

@@ -509,7 +509,7 @@ function ReportDetailPopup({
   onClose: () => void;
 }) {
   return (
-    <DialogContent className="m-4 max-h-[90vh] max-w-3xl overflow-y-auto border-2 border-emerald-500 scrollbar-inset sm:m-8">
+    <DialogContent className="inset-x-0 top-[50%] max-h-[90vh] overflow-y-auto border-2 border-emerald-500 p-6 !translate-x-0 !translate-y-[-50%] scrollbar-inset">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-lg">
           <Activity className="h-5 w-5 text-emerald-600" /> {report.title}

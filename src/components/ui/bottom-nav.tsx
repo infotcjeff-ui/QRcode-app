@@ -13,15 +13,31 @@ type Item = {
   icon: React.ComponentType<{ className?: string }>;
   /** 是否只在已登入時顯示 */
   authRequired?: boolean;
+  /** 額外的作用範圍前綴：符合其中任一路徑時也算 active */
+  matchPrefixes?: string[];
 };
 
 const ITEMS: Item[] = [
   { href: "/", label: "主頁", icon: Home },
-  { href: "/scan", label: "打卡", icon: QrCode },
-  // 「設定」入口只到 /profile，要進入「系統設定」(/system-setting)
-  // 必須從 /profile 上的「系統設定」按鈕點入，避免使用者直接從主畫面跳過個人中心。
-  { href: "/profile", label: "設定", icon: Settings, authRequired: true },
+  { href: "/scan-in", label: "打卡", icon: QrCode, matchPrefixes: ["/scan-in", "/scan"] },
+  // 「設定」入口對應到 /profile，但「系統設定」(/system-setting) 也視為設定的一部分，
+  // 因此使用者進入系統設定時，底部的「設定」分頁也會維持 active 狀態。
+  { href: "/profile", label: "設定", icon: Settings, authRequired: true, matchPrefixes: ["/profile", "/system-setting"] },
 ];
+
+/**
+ * 判斷當前 pathname 是否屬於某個 nav item 的「作用範圍」。
+ *  - 預設：與 `href` 完全相等，或以 `href + "/"` 開頭
+ *  - 若有額外 `matchPrefixes`：則以該清單中的任一路徑為前綴也算 active
+ */
+function isItemActive(pathname: string, href: string, matchPrefixes?: string[]): boolean {
+  if (href === "/") return pathname === "/";
+  if (pathname === href || pathname.startsWith(href + "/")) return true;
+  if (matchPrefixes && matchPrefixes.length > 0) {
+    return matchPrefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  }
+  return false;
+}
 
 /**
  * 底部導覽列 — 採用 Liquid Glass (流體玻璃) 風格：
@@ -83,10 +99,7 @@ export function BottomNav() {
       >
         {items.map((it) => {
           const Icon = it.icon;
-          const active =
-            it.href === "/"
-              ? pathname === "/"
-              : pathname === it.href || pathname.startsWith(it.href + "/");
+          const active = isItemActive(pathname, it.href, it.matchPrefixes);
           return (
             <Link
               key={it.href}

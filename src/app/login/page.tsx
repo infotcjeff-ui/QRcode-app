@@ -17,6 +17,7 @@ import {
   setAuthUser,
   type AuthUser,
 } from "@/lib/auth";
+import { getSystemTitle } from "@/lib/site-settings";
 import type { UserRole } from "@/lib/types";
 
 function LoginPageContent() {
@@ -28,6 +29,7 @@ function LoginPageContent() {
     (searchParams.get("role") as UserRole | null) === "attendant" ? "attendant" : "admin";
 
   const [role, setRole] = useState<UserRole>(initialRole);
+  const [systemTitle, setSystemTitle] = useState("校巴安全打卡系統");
   const [password, setPassword] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +37,17 @@ function LoginPageContent() {
   useEffect(() => {
     setError(null);
   }, [role, password]);
+
+  useEffect(() => {
+    setSystemTitle(getSystemTitle());
+    const onChange = () => setSystemTitle(getSystemTitle());
+    window.addEventListener("bus-site-settings-changed", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("bus-site-settings-changed", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,7 +104,7 @@ function LoginPageContent() {
             <Bus className="h-7 w-7" />
           </div>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            校巴安全打卡系統
+            {systemTitle}
           </h1>
           <p className="mt-1 text-sm text-slate-500">School Bus Check-in · 登入</p>
         </div>

@@ -1,6 +1,7 @@
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-server";
 import type { Bus, Student } from "@/lib/types";
 import { StudentsPageClient } from "@/components/admin/students-page-client";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,5 +31,13 @@ async function load() {
 
 export default async function StudentsPage() {
   const { students, buses } = await load();
-  return <StudentsPageClient initialStudents={students} buses={buses} />;
+  return (
+    <main className="flex w-full flex-col bg-slate-50">
+      <PageHeader title="學生管理" href="/system-setting" />
+
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-28 pt-5 sm:px-6 lg:px-8">
+        <StudentsPageClient initialStudents={students} buses={buses} />
+      </div>
+    </main>
+  );
 }

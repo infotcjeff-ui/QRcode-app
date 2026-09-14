@@ -7,12 +7,26 @@
  */
 
 import type { User, UserRole } from "@/lib/types";
+import { getSitePasswordOverride } from "@/lib/site-settings";
 
 export const SITE_ACCESS_COOKIE = "bus_site_access";
 export const SITE_ACCESS_MAX_AGE_SECONDS = 60 * 60 * 12; // 12 小時後自動失效，需重新輸入密碼。
 
 // 默認密碼。正式使用時請於 .env.local 設定 NEXT_PUBLIC_SITE_PASSWORD。
 export const SITE_PASSWORD: string = process.env.NEXT_PUBLIC_SITE_PASSWORD ?? "bus2026";
+
+/**
+ * 取得目前生效的站台密碼。
+ * 優先順序：localStorage 覆寫值 > 環境變數 / 預設值。
+ * 站台密碼覆寫由管理員在「管理員控制台」設定 (見 src/lib/site-settings.ts)。
+ */
+export function getEffectiveSitePassword(): string {
+  if (typeof window !== "undefined") {
+    const override = getSitePasswordOverride();
+    if (override && override.length > 0) return override;
+  }
+  return SITE_PASSWORD;
+}
 
 const AUTH_USER_KEY = "bus-auth-user";
 
@@ -31,7 +45,8 @@ export function clearSiteAccessCookie(): void {
 
 export function verifySitePassword(input: string): boolean {
   if (!input) return false;
-  return input.trim() === SITE_PASSWORD;
+  const expected = getEffectiveSitePassword();
+  return input.trim() === expected;
 }
 
 /* --------------------------- User auth (localStorage) --------------------------- */
