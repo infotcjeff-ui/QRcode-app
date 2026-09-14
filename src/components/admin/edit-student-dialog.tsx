@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast-context";
 import { MediaUpload } from "@/components/ui/media-upload";
+import { FaceEnrollment } from "@/components/admin/face-enrollment";
 import type { Bus, Student } from "@/lib/types";
 import { Loader2, Pencil } from "lucide-react";
 
@@ -147,6 +148,16 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
               disabled={submitting}
             />
           </div>
+
+          {/* 人臉辨識註冊（嵌入於編輯對話框） */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">人臉辨識</label>
+            <FaceEnrollment
+              studentId={student.id}
+              studentName={student.name}
+            />
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">家長姓名 *</label>
             <Input value={parentName} onChange={(e) => setParentName(e.target.value)} placeholder="例如：陳先生" />

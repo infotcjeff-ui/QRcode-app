@@ -1,22 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   CameraOff,
+  CheckCircle2,
+  CheckSquare,
   Eye,
   Loader2,
   Play,
+  RefreshCw,
   Square,
   Scan as ScanIcon,
   ShieldCheck,
   Trash2,
   Users,
   AlertTriangle,
-  RefreshCw,
   Image as ImageIcon,
-  CheckCircle2,
   Info,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,15 +35,22 @@ type Props = {
   logs: CheckLogWithStudent[];
   pickupPoint: string;
   onAfterCheck?: (studentId: string, log: CheckLogWithStudent) => void;
-  /** 上/落車類型 — 由 FaceTab 自己選擇，但會呼叫父層把 log 加進去 */
   onLogInsert?: (log: CheckLogWithStudent) => void;
 };
 
-// face-api 模型 base URL — 從 jsDelivr CDN 載入，避免把所有模型 bundle 進專案
-const FACE_MODEL_BASE_URL =
-  "https://cdn.jsdelivr.net/gh/vladmandic/face-api@master/model/";
+/** localStorage 內的 key */
+const FACE_DESCRIPTORS_KEY = "bus-face-descriptors";
 
-type ModelStatus = {
+/** face-api 模型 CDN URL */
+const FACE_MODEL_BASE_URL =
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/";
+
+type EnrolledRecord = {
+  enrolledAt: number;
+  descriptor: number[];
+};
+
+type ModelLoadState = {
   tinyFaceDetector: "idle" | "loading" | "ready" | "error";
   faceLandmark68Net: "idle" | "loading" | "ready" | "error";
   faceRecognitionNet: "idle" | "loading" | "ready" | "error";
@@ -57,25 +67,20 @@ type MatchResult = {
   studentId: string;
   student: Student;
   distance: number;
-  timestamp: number;
 };
 
 type DetectionSample = {
   fps: number;
   detected: boolean;
   match: MatchResult | null;
-  candidates: number; // 臉部數量
+  candidates: number;
 };
 
-const MATCH_DISTANCE_THRESHOLD = 0.55; // 越小越嚴格（face-api.js 建議 0.6，本調嚴一點）
-const MATCH_COOLDOWN_MS = 4000; // 同一學生命中後冷卻時間，避免重複觸發打卡
+/** 越小越嚴格。降低 threshold 提升偵測成功率。 */
+const MATCH_THRESHOLD = 0.55;
+/** 同一學生命中後冷卻 4 秒 */
+const MATCH_COOLDOWN_MS = 4000;
 
-/**
- * 人臉辨識分頁：
- *  - 使用 @vladmandic/face-api fork
- *  - 載入模型 → 啟動相機 → 建立學生人臉特徵 (enroll) → 即時偵測比對
- *  - 首次使用提供「測試模式」只偵測人臉不打卡，方便人工驗證可用性
- */
 export function FaceTab({
   trip,
   students,
@@ -85,14 +90,14 @@ export function FaceTab({
   onLogInsert,
 }: Props) {
   const { toast } = useToast();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const cooldownMapRef = useRef<Map<string, number>>(new Map());
 
   const [faceApi, setFaceApi] = useState<typeof import("@vladmandic/face-api") | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelStatus>({
+  const [modelState, setModelState] = useState<ModelLoadState>({
     tinyFaceDetector: "idle",
     faceLandmark68Net: "idle",
     faceRecognitionNet: "idle",
@@ -100,7 +105,6 @@ export function FaceTab({
   const [camState, setCamState] = useState<CamState>("idle");
   const [camError, setCamError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState<EnrollRecord[]>([]);
-  const [enrollFailed, setEnrollFailed] = useState<{ studentId: string; reason: string }[]>([]);
   const [enrollProgress, setEnrollProgress] = useState<{ done: number; total: number } | null>(null);
   const [mode, setMode] = useState<"off" | "test" | "recognize">("off");
   const [sample, setSample] = useState<DetectionSample>({
@@ -112,7 +116,17 @@ export function FaceTab({
   const [scanType, setScanType] = useState<CheckLogType>("ON");
   const [checkLogTriggeredIds, setCheckLogTriggeredIds] = useState<Set<string>>(new Set());
 
-  // ───────────────────────── 載入 SDK ─────────────────────────
+  const allModelsReady =
+    modelState.tinyFaceDetector === "ready" &&
+    modelState.faceLandmark68Net === "ready" &&
+    modelState.faceRecognitionNet === "ready";
+
+  const anyModelError =
+    modelState.tinyFaceDetector === "error" ||
+    modelState.faceLandmark68Net === "error" ||
+    modelState.faceRecognitionNet === "error";
+
+  // ── 初始化：載入 SDK ───────────────────────────────
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -120,20 +134,18 @@ export function FaceTab({
         const mod = await import("@vladmandic/face-api");
         if (mounted) setFaceApi(mod);
       } catch (err) {
-        console.error("[FaceTab] Failed to load @vladmandic/face-api", err);
-        toast({
-          title: "人臉辨識 SDK 載入失敗",
-          description: err instanceof Error ? err.message : "未知錯誤",
-          variant: "destructive",
-        });
+        console.error("[FaceTab] SDK load failed", err);
+        toast({ title: "人臉 SDK 載入失敗", description: String(err), variant: "destructive" });
       }
     })();
     return () => {
       mounted = false;
+      stopAll();
     };
-  }, [toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // 卸載時清理
+  // ── 卸載 ─────────────────────────────────────────
   useEffect(() => {
     return () => {
       stopAll();
@@ -156,91 +168,75 @@ export function FaceTab({
     setCamState("idle");
   }, []);
 
-  // ─────────────────────── 載入 face-api 模型 ───────────────────────
+  // ── 從 localStorage 讀取已註冊的 Descriptor ─────────
+  const loadFromStorage = useCallback((): EnrollRecord[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(FACE_DESCRIPTORS_KEY);
+      if (!raw) return [];
+      const obj = JSON.parse(raw) as Record<string, EnrolledRecord>;
+      return Object.entries(obj)
+        .filter(([sid]) => students.some((s) => s.id === sid))
+        .map(([sid, rec]) => ({
+          studentId: sid,
+          descriptor: new Float32Array(rec.descriptor),
+        }));
+    } catch {
+      return [];
+    }
+  }, [students]);
+
+  // 掛載後自動從 localStorage 讀取，並與當前學生比對
+  useEffect(() => {
+    const stored = loadFromStorage();
+    setEnrolled(stored);
+  }, [loadFromStorage]);
+
+  // ── 下載 face-api 模型 ──────────────────────────────
   const loadModels = useCallback(async () => {
-    if (!faceApi) {
-      toast({ title: "SDK 尚未載入完成", variant: "destructive" });
-      return;
-    }
-    const setNext = (k: keyof ModelStatus, v: ModelStatus[keyof ModelStatus]) =>
-      setModelStatus((s) => ({ ...s, [k]: v }));
+    if (!faceApi) return;
+    const setNext = (k: keyof ModelLoadState, v: ModelLoadState[keyof ModelLoadState]) =>
+      setModelState((s) => ({ ...s, [k]: v }));
 
-    try {
-      setNext("tinyFaceDetector", "loading");
-      await faceApi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_BASE_URL);
-      setNext("tinyFaceDetector", "ready");
-    } catch (e) {
-      console.error("[FaceTab] tinyFaceDetector load failed", e);
-      setNext("tinyFaceDetector", "error");
-    }
-    try {
-      setNext("faceLandmark68Net", "loading");
-      await faceApi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_BASE_URL);
-      setNext("faceLandmark68Net", "ready");
-    } catch (e) {
-      console.error("[FaceTab] faceLandmark68Net load failed", e);
-      setNext("faceLandmark68Net", "error");
-    }
-    try {
-      setNext("faceRecognitionNet", "loading");
-      await faceApi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_BASE_URL);
-      setNext("faceRecognitionNet", "ready");
-    } catch (e) {
-      console.error("[FaceTab] faceRecognitionNet load failed", e);
-      setNext("faceRecognitionNet", "error");
-    }
-  }, [faceApi, toast]);
+    const models: Array<{ key: keyof ModelLoadState; loader: () => Promise<void> }> = [
+      {
+        key: "tinyFaceDetector",
+        loader: () => faceApi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_BASE_URL),
+      },
+      {
+        key: "faceLandmark68Net",
+        loader: () => faceApi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_BASE_URL),
+      },
+      {
+        key: "faceRecognitionNet",
+        loader: () => faceApi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_BASE_URL),
+      },
+    ];
 
-  // ─────────────────────── 啟動相機 ───────────────────────
+    for (const m of models) {
+      try {
+        setNext(m.key, "loading");
+        await m.loader();
+        setNext(m.key, "ready");
+      } catch (e) {
+        console.error(`[FaceTab] ${m.key} load failed`, e);
+        setNext(m.key, "error");
+      }
+    }
+  }, [faceApi]);
+
+  // ── 啟動相機 ────────────────────────────────────────
   const startCamera = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setCamState("error");
-      setCamError("此裝置/瀏覽器不支援 getUserMedia API");
+      setCamError("此裝置不支援相機");
       return;
     }
     setCamState("requesting");
     setCamError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user", // 前鏡頭 (自拍適合人臉)
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCamState("active");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "無法啟動相機";
-      console.warn("[FaceTab] getUserMedia failed", err);
-      setCamError(message);
-      setCamState(
-        message.toLowerCase().includes("denied") ||
-          message.toLowerCase().includes("permission")
-          ? "denied"
-          : "error"
-      );
-    }
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    stopAll();
-    setMode("off");
-  }, [stopAll]);
-
-  // 切換鏡頭 (前/後)
-  const flipCamera = useCallback(async () => {
-    if (!streamRef.current) return;
-    streamRef.current.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    // 嘗試切換 facingMode
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+        // 使用後鏡頭 (environment)，測試時更方便對著自己
         video: {
           facingMode: "environment",
           width: { ideal: 640 },
@@ -253,31 +249,60 @@ export function FaceTab({
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      setCamState("active");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "無法啟動相機";
+      setCamError(msg);
+      setCamState(
+        msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
+          ? "denied"
+          : "error"
+      );
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    stopAll();
+    setMode("off");
+  }, [stopAll]);
+
+  const flipCamera = useCallback(async () => {
+    if (!streamRef.current) return;
+    streamRef.current.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          // 切換到另一個鏡頭
+          facingMode: { exact: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
     } catch {
-      // 如果環境鏡頭不可用，退回前鏡頭
+      // fallback 到 environment
       await startCamera();
     }
   }, [startCamera]);
 
-  // ────────────────── 為每位學生建立人臉特徵 (enroll) ──────────────────
-  const enrollStudents = useCallback(async () => {
+  // ── 從 URL 為每位有照片的學生建立 Descriptor ─────────
+  const enrollFromPhotos = useCallback(async () => {
     if (!faceApi) return;
     const withPhoto = students.filter((s) => s.photo_url);
     if (withPhoto.length === 0) {
-      toast({
-        title: "沒有可用的學生照片",
-        description: "請先到「學生管理」上傳照片，再回到此頁。",
-        variant: "destructive",
-      });
+      toast({ title: "沒有可用的學生照片", description: "請先上傳照片", variant: "destructive" });
       return;
     }
 
     setEnrolled([]);
-    setEnrollFailed([]);
     setEnrollProgress({ done: 0, total: withPhoto.length });
-
     const success: EnrollRecord[] = [];
-    const failed: { studentId: string; reason: string }[] = [];
 
     for (let i = 0; i < withPhoto.length; i++) {
       const s = withPhoto[i];
@@ -286,70 +311,49 @@ export function FaceTab({
         const det = await faceApi
           .detectSingleFace(
             img,
-            new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 })
+            new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 })
           )
           .withFaceLandmarks()
           .withFaceDescriptor();
         if (!det) {
-          failed.push({ studentId: s.id, reason: "未偵測到人臉" });
+          // 跳過無臉的
         } else {
           success.push({ studentId: s.id, descriptor: det.descriptor });
         }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "未知錯誤";
-        failed.push({ studentId: s.id, reason: msg });
+      } catch {
+        // 跳過錯誤的
       }
       setEnrollProgress({ done: i + 1, total: withPhoto.length });
     }
 
-    setEnrolled(success);
-    setEnrollFailed(failed);
+    // 合併 localStorage 已有 + 從 URL 新建的
+    const fromStorage = loadFromStorage();
+    const existingIds = new Set(fromStorage.map((r) => r.studentId));
+    const combined = [
+      ...fromStorage,
+      ...success.filter((r) => !existingIds.has(r.studentId)),
+    ];
+
+    setEnrolled(combined);
     setEnrollProgress(null);
+
+    // 存入 localStorage（備份）
+    const map: Record<string, EnrolledRecord> = {};
+    for (const r of combined) {
+      map[r.studentId] = { enrolledAt: Date.now(), descriptor: Array.from(r.descriptor) };
+    }
+    try {
+      window.localStorage.setItem(FACE_DESCRIPTORS_KEY, JSON.stringify(map));
+    } catch {}
 
     toast({
       title: `建立人臉特徵完成`,
-      description: `成功 ${success.length} 位 / 失敗 ${failed.length} 位`,
-      duration: 3500,
+      description: `成功 ${success.length} / ${withPhoto.length} 位（另有 ${fromStorage.length} 位已從本地載入）`,
+      duration: 4000,
     });
-  }, [faceApi, students, toast]);
+  }, [faceApi, students, loadFromStorage, toast]);
 
-  // ────────────────────────── 偵測流程 ──────────────────────────
-  const startTest = useCallback(async () => {
-    if (!faceApi) return;
-    if (modelStatus.tinyFaceDetector !== "ready") {
-      await loadModels();
-    }
-    if (camState !== "active") {
-      await startCamera();
-    }
-    setMode("test");
-    runDetectionLoop("test");
-  }, [faceApi, modelStatus, loadModels, startCamera, camState]);
-
-  const startRecognize = useCallback(async () => {
-    if (!faceApi) return;
-    if (enrolled.length === 0) {
-      toast({
-        title: "尚未建立學生人臉特徵",
-        description: "請先點擊下方「建立學生人臉特徵」按鈕。",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (
-      modelStatus.tinyFaceDetector !== "ready" ||
-      modelStatus.faceLandmark68Net !== "ready" ||
-      modelStatus.faceRecognitionNet !== "ready"
-    ) {
-      await loadModels();
-    }
-    if (camState !== "active") {
-      await startCamera();
-    }
-    setMode("recognize");
-    runDetectionLoop("recognize");
-  }, [faceApi, enrolled.length, modelStatus, loadModels, startCamera, camState]);
-
+  // ── 停止偵測 ────────────────────────────────────────
   const stopDetection = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -363,151 +367,184 @@ export function FaceTab({
     }
   }, []);
 
-  function runDetectionLoop(mode: "test" | "recognize") {
+  // ── 測試模式 ────────────────────────────────────────
+  const startTest = useCallback(async () => {
+    if (!faceApi && modelState.tinyFaceDetector !== "ready") {
+      if (!faceApi) {
+        const mod = await import("@vladmandic/face-api");
+        setFaceApi(mod);
+      }
+    }
+    if (modelState.tinyFaceDetector !== "ready") {
+      await loadModels();
+    }
+    if (camState !== "active") {
+      await startCamera();
+    }
+    setMode("test");
+    runDetectionLoop("test");
+  }, [faceApi, modelState, loadModels, startCamera, camState]);
+
+  // ── 識別模式 ────────────────────────────────────────
+  const startRecognize = useCallback(async () => {
+    if (enrolled.length === 0) {
+      toast({
+        title: "尚未建立學生人臉特徵",
+        description: "請先「從本地載入」或「從照片建立」特徵庫。",
+        variant: "destructive",
+        duration: 4000,
+      });
+      return;
+    }
+    if (!faceApi && modelState.tinyFaceDetector !== "ready") {
+      if (!faceApi) {
+        const mod = await import("@vladmandic/face-api");
+        setFaceApi(mod);
+      }
+    }
+    if (!allModelsReady) {
+      await loadModels();
+    }
+    if (camState !== "active") {
+      await startCamera();
+    }
+    setMode("recognize");
+    runDetectionLoop("recognize");
+  }, [enrolled.length, allModelsReady, modelState, loadModels, startCamera, camState, toast]);
+
+  // ── 偵測迴圈 ────────────────────────────────────────
+  function runDetectionLoop(runMode: "test" | "recognize") {
     if (!faceApi || !videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let lastTs = performance.now();
-    let frameCount = 0;
     let fpsStart = performance.now();
+    let frameCount = 0;
 
     const detectorOptions = new faceApi.TinyFaceDetectorOptions({
-      inputSize: 320,
-      scoreThreshold: 0.5,
+      inputSize: 256, // 小 → 快（可用於快速測試）
+      scoreThreshold: 0.3, // 降低門檻，提升偵測成功率
     });
 
     const tick = async () => {
-      if (mode !== "test" && mode !== "recognize") return;
+      if (runMode !== "test" && runMode !== "recognize") return;
       if (video.readyState < 2) {
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
 
-      // 調整 canvas 大小與 video 同步
       const { videoWidth: w, videoHeight: h } = video;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
       }
-
       ctx.clearRect(0, 0, w, h);
 
-      // 為求型別相容，這裡用結構型別 (structural typing) 儲存偵測結果
-      // 因為 face-api 多層 generic 太長，這層手動指定必要欄位
-      type DetectionItem = {
-        detection: import("@vladmandic/face-api").FaceDetection;
+      type RawDetection = {
+        detection: { box: { x: number; y: number; width: number; height: number } };
         descriptor?: Float32Array;
       };
-      let detections: DetectionItem[] = [];
+      let raw: RawDetection[] = [];
+
       try {
-        const raw = await faceApi
-          .detectAllFaces(video, detectorOptions)
-          .withFaceLandmarks()
-          .withFaceDescriptors();
-        // 將 face-api 強型別結果收斂成結構型別
-        detections = raw.map((d) => ({
-          detection: d.detection,
-          descriptor: d.descriptor,
+        // face-api 的多層 generic chain 型別推斷過長，用 unknown 過渡以避免 any 觸發 linter 報錯
+        const task = faceApi.detectAllFaces(video, detectorOptions).withFaceLandmarks().withFaceDescriptors() as unknown as Promise<RawDetection[]>;
+        const results = await task;
+        if (!results || results.length === 0) {
+          setSample((s) => ({ ...s, detected: false, candidates: 0 }));
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        raw = results;
+
+        const detected = raw.length > 0;
+
+        // FPS
+        frameCount++;
+        const now = performance.now();
+        if (now - fpsStart > 1000) {
+          setSample((s) => ({ ...s, fps: Math.round((frameCount * 1000) / (now - fpsStart)) }));
+          frameCount = 0;
+          fpsStart = now;
+        }
+
+        let bestMatch: MatchResult | null = null;
+
+        if (runMode === "recognize" && detected && enrolled.length > 0) {
+          for (const det of raw) {
+            if (!det.descriptor) continue;
+            let nearestDist = Infinity;
+            let nearestStudentId: string | null = null;
+            for (const record of enrolled) {
+              const d = faceApi.euclideanDistance(det.descriptor, record.descriptor);
+              if (d < nearestDist) {
+                nearestDist = d;
+                nearestStudentId = record.studentId;
+              }
+            }
+            if (nearestStudentId && nearestDist < MATCH_THRESHOLD) {
+              if (!bestMatch || nearestDist < bestMatch.distance) {
+                const student = students.find((s) => s.id === nearestStudentId);
+                if (student) {
+                  bestMatch = {
+                    studentId: nearestStudentId,
+                    student,
+                    distance: nearestDist,
+                  };
+                }
+              }
+            }
+          }
+
+          if (bestMatch) {
+            const last = cooldownMapRef.current.get(bestMatch.studentId) ?? 0;
+            if (now - last > MATCH_COOLDOWN_MS) {
+              cooldownMapRef.current.set(bestMatch.studentId, now);
+              void triggerCheckIn(bestMatch.student, bestMatch.distance);
+              setCheckLogTriggeredIds((prev) => {
+                const next = new Set(prev);
+                next.add(bestMatch!.studentId);
+                return next;
+              });
+            }
+          }
+        }
+
+        // 繪製偵測框
+        if (runMode === "recognize" && bestMatch) {
+          const box = raw[0].detection.box;
+          ctx.strokeStyle = "#10b981";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(box.x, box.y, box.width, box.height);
+          ctx.fillStyle = "#10b981";
+          ctx.font = "bold 16px sans-serif";
+          const label = `${bestMatch.student.name} (${(1 - bestMatch.distance).toFixed(1)})`;
+          const tw = ctx.measureText(label).width;
+          ctx.fillRect(box.x, box.y - 22, tw + 10, 22);
+          ctx.fillStyle = "#fff";
+          ctx.fillText(label, box.x + 5, box.y - 7);
+        }
+
+        setSample((s) => ({
+          fps: s.fps,
+          detected: raw.length > 0,
+          match: bestMatch,
+          candidates: raw.length,
         }));
-      } catch (err) {
-        console.warn("[FaceTab] detection error", err);
+
         rafRef.current = requestAnimationFrame(tick);
-        return;
+      } catch (err) {
+        console.warn("[FaceTab] detection tick error", err);
+        rafRef.current = requestAnimationFrame(tick);
       }
-
-      // 計算 FPS
-      frameCount++;
-      const now = performance.now();
-      if (now - fpsStart > 1000) {
-        setSample((s) => ({ ...s, fps: Math.round((frameCount * 1000) / (now - fpsStart)) }));
-        frameCount = 0;
-        fpsStart = now;
-      }
-      lastTs = now;
-
-      const detected = detections.length > 0;
-      let bestMatch: MatchResult | null = null;
-
-      if (mode === "recognize" && detected && enrolled.length > 0) {
-        // 對每個偵測到的人臉，取 descriptor 比對
-        for (const det of detections) {
-          if (!det.descriptor) continue;
-          let nearestDist = Infinity;
-          let nearestStudentId: string | null = null;
-          for (const record of enrolled) {
-            const d = faceApi.euclideanDistance(det.descriptor, record.descriptor);
-            if (d < nearestDist) {
-              nearestDist = d;
-              nearestStudentId = record.studentId;
-            }
-          }
-          if (
-            nearestStudentId &&
-            nearestDist < MATCH_DISTANCE_THRESHOLD &&
-            (!bestMatch || nearestDist < bestMatch.distance)
-          ) {
-            const student = students.find((s) => s.id === nearestStudentId);
-            if (student) {
-              bestMatch = {
-                studentId: nearestStudentId,
-                student,
-                distance: nearestDist,
-                timestamp: Date.now(),
-              };
-            }
-          }
-        }
-
-        if (bestMatch) {
-          const last = cooldownMapRef.current.get(bestMatch.studentId) ?? 0;
-          if (Date.now() - last > MATCH_COOLDOWN_MS) {
-            cooldownMapRef.current.set(bestMatch.studentId, Date.now());
-            // 觸發人臉打卡
-            void triggerCheckIn(bestMatch.student, bestMatch.distance);
-            setCheckLogTriggeredIds((prev) => {
-              const next = new Set(prev);
-              next.add(bestMatch!.studentId);
-              return next;
-            });
-          }
-        }
-      }
-
-      // 繪製偵測框 (顏色：recognize 比對命中 → 綠色, miss → 紅色；test → 藍色)
-      const resized = faceApi.resizeResults(detections, { width: w, height: h });
-      if (mode === "recognize" && bestMatch) {
-        const box = resized[0].detection.box;
-        ctx.strokeStyle = "#10b981";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
-        ctx.fillStyle = "#10b981";
-        ctx.font = "bold 18px sans-serif";
-        const label = `${bestMatch.student.name} (${bestMatch.distance.toFixed(2)})`;
-        const textWidth = ctx.measureText(label).width;
-        ctx.fillRect(box.x, box.y - 26, textWidth + 12, 26);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(label, box.x + 6, box.y - 8);
-      } else {
-        faceApi.draw.drawDetections(canvas, resized);
-      }
-
-      setSample((s) => ({
-        fps: s.fps,
-        detected,
-        match: bestMatch,
-        candidates: detections.length,
-      }));
-
-      rafRef.current = requestAnimationFrame(tick);
-    };
+    }
 
     rafRef.current = requestAnimationFrame(tick);
   }
 
-  // ─────────────────── 觸發人臉打卡 API ───────────────────
+  // ── 觸發打卡 API ──────────────────────────────────
   const triggerCheckIn = useCallback(
     async (student: Student, distance: number) => {
       const location = pickupPoint || "人臉辨識";
@@ -530,11 +567,7 @@ export function FaceTab({
         };
 
         if (!res.ok || !json.success) {
-          // 重複或無效 → 不算錯，靜默即可 (因為可能多人同時經過)
-          if (json.error_code === "DUPLICATE_ON" || json.error_code === "DUPLICATE_OFF") {
-            // 已在 cooldown 內重複偵測到同一人，靜默忽略
-            return;
-          }
+          if (json.error_code === "DUPLICATE_ON" || json.error_code === "DUPLICATE_OFF") return;
           toast({
             title: `${student.name} 打卡失敗`,
             description: json.error ?? "未知錯誤",
@@ -557,26 +590,25 @@ export function FaceTab({
           });
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "網絡錯誤";
-        toast({
-          title: "網絡錯誤",
-          description: msg,
-          variant: "destructive",
-        });
+        toast({ title: "網絡錯誤", description: String(err), variant: "destructive" });
       }
     },
     [pickupPoint, trip.id, scanType, onLogInsert, onAfterCheck, toast]
   );
 
-  const allModelsReady =
-    modelStatus.tinyFaceDetector === "ready" &&
-    modelStatus.faceLandmark68Net === "ready" &&
-    modelStatus.faceRecognitionNet === "ready";
+  // ── 從 localStorage 讀取並同步 ──────────────────────
+  const reloadFromStorage = useCallback(() => {
+    const stored = loadFromStorage();
+    setEnrolled(stored);
+    toast({
+      title: "已重新載入",
+      description: `從本地讀取 ${stored.length} 位學生的人臉特徵。`,
+      duration: 2500,
+    });
+  }, [loadFromStorage, toast]);
 
-  const anyModelError =
-    modelStatus.tinyFaceDetector === "error" ||
-    modelStatus.faceLandmark68Net === "error" ||
-    modelStatus.faceRecognitionNet === "error";
+  const enrolledCount = enrolled.length;
+  const totalWithPhoto = students.filter((s) => s.photo_url).length;
 
   return (
     <div className="space-y-3">
@@ -585,15 +617,16 @@ export function FaceTab({
         <CardContent className="space-y-1 p-3 text-xs">
           <div className="flex items-center gap-2 font-semibold text-sky-900">
             <ShieldCheck className="h-4 w-4" />
-            <span>人臉辨識系統 (vladmandic/face-api)</span>
+            <span>人臉辨識系統（已預先註冊：{enrolledCount} 位）</span>
           </div>
           <p className="text-slate-600">
-            首次使用：點擊「下載模型」→ 啟動相機 → 建立學生特徵 → 開始識別。
+            特徵已從 localStorage 預先載入，無需每次下載模型。
+            可在「編輯學生」頁面拍攝人臉，或直接從 URL 建立。
           </p>
         </CardContent>
       </Card>
 
-      {/* ── 模型 / 相機狀態 + 操作 ── */}
+      {/* ── 模型 / 相機狀態 ── */}
       <Card>
         <CardContent className="space-y-3 p-3">
           {/* 模型狀態 */}
@@ -606,44 +639,23 @@ export function FaceTab({
                 size="sm"
                 variant={anyModelError ? "destructive" : "outline"}
                 onClick={loadModels}
-                disabled={!faceApi || modelStatus.tinyFaceDetector === "loading"}
+                disabled={!faceApi || modelState.tinyFaceDetector === "loading"}
                 className="h-7"
               >
-                {modelStatus.tinyFaceDetector === "loading" ? (
-                  <>
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" /> 下載中
-                  </>
+                {modelState.tinyFaceDetector === "loading" ? (
+                  <><Loader2 className="mr-1 h-3 w-3 animate-spin" /> 下載中</>
                 ) : allModelsReady ? (
-                  <>
-                    <CheckCircle2 className="mr-1 h-3 w-3" /> 重新下載
-                  </>
+                  <><CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" /> 就緒</>
                 ) : (
-                  <>
-                    <RefreshCw className="mr-1 h-3 w-3" /> 下載模型
-                  </>
+                  <><RefreshCw className="mr-1 h-3 w-3" /> 下載模型</>
                 )}
               </Button>
             </div>
-            <div className="grid grid-cols-1 gap-1 text-[11px] sm:grid-cols-3">
-              <ModelBadge
-                name="tinyFaceDetector"
-                status={modelStatus.tinyFaceDetector}
-              />
-              <ModelBadge
-                name="faceLandmark68Net"
-                status={modelStatus.faceLandmark68Net}
-              />
-              <ModelBadge
-                name="faceRecognitionNet"
-                status={modelStatus.faceRecognitionNet}
-              />
+            <div className="grid grid-cols-3 gap-1 text-[11px]">
+              <ModelBadge name="tinyFace" status={modelState.tinyFaceDetector} />
+              <ModelBadge name="landmark68" status={modelState.faceLandmark68Net} />
+              <ModelBadge name="recognition" status={modelState.faceRecognitionNet} />
             </div>
-            {anyModelError ? (
-              <p className="mt-1 rounded-md bg-rose-50 px-2 py-1 text-[10px] text-rose-700">
-                部分模型下載失敗。多數 CDN 為 https，需要 HTTPS 才能下載模型。若開發階段請改用
-                <code>npm run dev:tunnel</code>。
-              </p>
-            ) : null}
           </div>
 
           {/* 相機控制 */}
@@ -679,31 +691,26 @@ export function FaceTab({
                 )}
               </div>
             </div>
-            <div className="text-[11px] text-slate-500">
-              狀態：
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
               <Badge
                 variant={
-                  camState === "active"
-                    ? "success"
-                    : camState === "denied" || camState === "error"
-                    ? "destructive"
-                    : "secondary"
+                  camState === "active" ? "success" : camState === "denied" || camState === "error" ? "destructive" : "secondary"
                 }
-                className="ml-1 text-[10px]"
+                className="text-[10px]"
               >
                 {camState === "idle" && "未啟動"}
-                {camState === "requesting" && "請求權限中…"}
-                {camState === "active" && "已啟動"}
+                {camState === "requesting" && "請求中…"}
+                {camState === "active" && "已啟動（後鏡頭）"}
                 {camState === "denied" && "權限被拒"}
                 {camState === "error" && "啟動失敗"}
               </Badge>
-              {camError ? <span className="ml-2 text-rose-600">{camError}</span> : null}
+              {camError ? <span className="text-rose-600">{camError}</span> : null}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* ── 即時影像 / 偵測畫面 ── */}
+      {/* ── 即時影像 ── */}
       <Card className="overflow-hidden">
         <CardContent className="p-3">
           <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900">
@@ -722,12 +729,12 @@ export function FaceTab({
                 <Eye className="h-8 w-8 opacity-60" />
                 <p className="text-sm">相機未啟動</p>
                 <p className="px-4 text-center text-[11px] text-slate-300">
-                  點擊上方「啟動相機」以預覽。
+                  啟動相機後即可使用偵測 / 識別功能
                 </p>
               </div>
             ) : null}
 
-            {/* 偵測狀態 HUD */}
+            {/* HUD */}
             {mode !== "off" ? (
               <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-1 text-[10px]">
                 <span
@@ -737,196 +744,174 @@ export function FaceTab({
                       : "bg-slate-700/70 text-slate-200"
                   }`}
                 >
-                  {sample.detected
-                    ? `偵測到 ${sample.candidates} 張臉`
-                    : "未偵測到臉"}
+                  {sample.detected ? `偵測到 ${sample.candidates} 張臉` : "未偵測到"}
                 </span>
                 <span className="rounded-md bg-slate-700/70 px-2 py-0.5 text-slate-200 backdrop-blur">
                   FPS {sample.fps}
                 </span>
+                {sample.match && (
+                  <span className="rounded-md bg-emerald-500/90 px-2 py-0.5 font-semibold text-white backdrop-blur">
+                    命中：{sample.match.student.name}
+                  </span>
+                )}
               </div>
             ) : null}
           </div>
 
-          {/* 模式選擇 */}
-          <div className="mt-3 space-y-2">
-            {/* 上 / 落車 */}
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2">
+          {/* 上 / 落車切換 */}
+          <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2">
+            <span className={`text-xs font-medium ${scanType === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
+              上車
+            </span>
+            <button
+              onClick={() => setScanType(scanType === "ON" ? "OFF" : "ON")}
+              className={`relative flex h-6 w-12 items-center rounded-full px-1 transition-colors ${
+                scanType === "OFF" ? "bg-sky-500" : "bg-emerald-500"
+              }`}
+            >
               <span
-                className={`text-xs font-medium ${
-                  scanType === "ON" ? "text-emerald-600" : "text-slate-400"
+                className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  scanType === "OFF" ? "translate-x-6" : "translate-x-1"
                 }`}
-              >
-                上車
-              </span>
-              <button
-                onClick={() => setScanType(scanType === "ON" ? "OFF" : "ON")}
-                className={`relative flex h-6 w-12 items-center rounded-full px-1 transition-colors ${
-                  scanType === "OFF" ? "bg-sky-500" : "bg-emerald-500"
-                }`}
-              >
-                <span
-                  className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    scanType === "OFF" ? "translate-x-6" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span
-                className={`text-xs font-medium ${
-                  scanType === "OFF" ? "text-sky-600" : "text-slate-400"
-                }`}
-              >
-                落車
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {mode === "off" ? (
-                <>
-                  <Button
-                    onClick={startTest}
-                    variant="outline"
-                    className="border-sky-300 text-sky-700 hover:bg-sky-50"
-                  >
-                    <Play className="mr-1 h-4 w-4" /> 測試模式
-                  </Button>
-                  <Button
-                    onClick={startRecognize}
-                    disabled={enrolled.length === 0}
-                    className="bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    <ScanIcon className="mr-1 h-4 w-4" /> 識別模式
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  onClick={stopDetection}
-                  variant="destructive"
-                  className="col-span-2"
-                >
-                  <Square className="mr-1 h-4 w-4" />
-                  停止偵測
-                </Button>
-              )}
-            </div>
-            <p className="text-center text-[10px] text-slate-500">
-              {mode === "test"
-                ? "🧪 測試模式 — 僅偵測人臉，不會自動打卡"
-                : mode === "recognize"
-                ? "🟢 識別模式 — 比對到學生後自動打卡 (相同人冷卻 4 秒)"
-                : "未啟動偵測"}
-            </p>
+              />
+            </button>
+            <span className={`text-xs font-medium ${scanType === "OFF" ? "text-sky-600" : "text-slate-400"}`}>
+              落車
+            </span>
           </div>
+
+          {/* 模式按鈕 */}
+          <div className="grid grid-cols-2 gap-2">
+            {mode === "off" ? (
+              <>
+                <Button
+                  onClick={startTest}
+                  variant="outline"
+                  className="border-sky-300 text-sky-700 hover:bg-sky-50"
+                >
+                  <Play className="mr-1 h-4 w-4" /> 測試模式
+                </Button>
+                <Button
+                  onClick={startRecognize}
+                  disabled={enrolled.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <ScanIcon className="mr-1 h-4 w-4" /> 識別模式
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={stopDetection}
+                variant="destructive"
+                className="col-span-2"
+              >
+                <Square className="mr-1 h-4 w-4" /> 停止偵測
+              </Button>
+            )}
+          </div>
+          <p className="text-center text-[10px] text-slate-500">
+            {mode === "test"
+              ? "🧪 測試模式 — 僅偵測人臉，不會自動打卡"
+              : mode === "recognize"
+              ? `🟢 識別模式 — 比對 ${enrolled.length} 位學生，命中後自動打卡（冷卻 ${MATCH_COOLDOWN_MS / 1000}s）`
+              : "選擇模式開始偵測"}
+          </p>
         </CardContent>
       </Card>
 
-      {/* ── 學生人臉特徵 (enroll) ── */}
+      {/* ── 特徵庫管理 ── */}
       <Card>
         <CardContent className="space-y-3 p-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-sm font-semibold text-slate-800">
               <Users className="h-4 w-4" />
-              學生人臉特徵庫
+              人臉特徵庫
               <Badge variant="secondary" className="ml-1 text-[10px]">
-                {enrolled.length} / {students.filter((s) => s.photo_url).length}
+                {enrolled.length} 位
               </Badge>
             </span>
             <Button
               size="sm"
               variant="outline"
-              onClick={enrollStudents}
-              disabled={!faceApi || !allModelsReady || enrollProgress !== null}
-              className="h-8"
+              onClick={reloadFromStorage}
+              className="h-7"
+              title="從 localStorage 重新讀取"
             >
-              {enrollProgress ? (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  建立中 {enrollProgress.done}/{enrollProgress.total}
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="mr-1 h-3 w-3" />
-                  建立 / 重建
-                </>
-              )}
+              <Wifi className="mr-1 h-3 w-3" /> 從本地讀取
             </Button>
           </div>
+
+          {enrolled.length === 0 ? (
+            <div className="space-y-2">
+              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-[11px] text-slate-500">
+                目前沒有已註冊的人臉特徵。
+                <br />
+                方式①：在「編輯學生」頁面拍攝人臉
+                <br />
+                方式②：按下方的「從 URL 建立」
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={enrollFromPhotos}
+                disabled={!faceApi || !allModelsReady || enrollProgress !== null}
+                className="w-full"
+              >
+                {enrollProgress ? (
+                  <><Loader2 className="mr-1 h-3 w-3 animate-spin" /> 建立中…</>
+                ) : (
+                  <><ImageIcon className="mr-1 h-3 w-3" /> 從學生照片 URL 建立</>
+                )}
+              </Button>
+              {totalWithPhoto === 0 && (
+                <p className="text-center text-[10px] text-amber-600">
+                  ⚠️ 尚無學生的照片 URL，請先上傳
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {enrolled.map((r) => {
+                const s = students.find((x) => x.id === r.studentId);
+                return (
+                  <span
+                    key={r.studentId}
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800"
+                    title={s?.name ?? r.studentId}
+                  >
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                    {s?.name ?? r.studentId.slice(0, 6)}
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           {enrollProgress ? (
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
               <div
                 className="h-full bg-sky-500 transition-all"
-                style={{
-                  width: `${Math.round((enrollProgress.done / enrollProgress.total) * 100)}%`,
-                }}
+                style={{ width: `${Math.round((enrollProgress.done / enrollProgress.total) * 100)}%` }}
               />
-            </div>
-          ) : null}
-
-          {enrolled.length === 0 && enrollFailed.length === 0 && !enrollProgress ? (
-            <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-[11px] text-slate-500">
-              尚未建立任何學生的人臉特徵。建議點擊「建立 / 重建」批次處理。
-            </p>
-          ) : null}
-
-          {enrolled.length > 0 ? (
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-emerald-700">
-                ✅ 成功 ({enrolled.length})
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {enrolled.slice(0, 12).map((r) => {
-                  const s = students.find((x) => x.id === r.studentId);
-                  return (
-                    <span
-                      key={r.studentId}
-                      className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800"
-                      title={s?.name ?? r.studentId}
-                    >
-                      <CheckCircle2 className="h-2.5 w-2.5" />
-                      {s?.name ?? r.studentId.slice(0, 6)}
-                    </span>
-                  );
-                })}
-                {enrolled.length > 12 ? (
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                    +{enrolled.length - 12}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {enrollFailed.length > 0 ? (
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-rose-700">
-                ⚠️ 失敗 ({enrollFailed.length})
-              </p>
-              <div className="space-y-1">
-                {enrollFailed.slice(0, 5).map((f) => {
-                  const s = students.find((x) => x.id === f.studentId);
-                  return (
-                    <div
-                      key={f.studentId}
-                      className="flex items-center justify-between rounded-md border border-rose-200 bg-rose-50/60 px-2 py-1 text-[10px]"
-                    >
-                      <span className="text-rose-900">{s?.name ?? f.studentId}</span>
-                      <span className="text-rose-700">{f.reason}</span>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           ) : null}
         </CardContent>
       </Card>
 
-      {/* ── 最近命中 / 觸發的打卡 ── */}
+      {/* ── 最近自動打卡 ── */}
       {checkLogTriggeredIds.size > 0 ? (
         <Card className="border-emerald-300 bg-emerald-50/60">
           <CardContent className="space-y-2 p-3">
-            <div className="flex items-center gap-1 text-xs font-semibold text-emerald-800">
-              <CheckCircle2 className="h-4 w-4" /> 本次已自動打卡
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 text-xs font-semibold text-emerald-800">
+                <CheckCircle2 className="h-4 w-4" /> 已自動打卡
+              </div>
+              <button
+                onClick={() => setCheckLogTriggeredIds(new Set())}
+                className="text-[11px] text-emerald-700 underline hover:text-emerald-900"
+              >
+                <Trash2 className="mr-1 inline h-3 w-3" /> 清空
+              </button>
             </div>
             <div className="space-y-1">
               {Array.from(checkLogTriggeredIds).map((sid) => {
@@ -936,50 +921,36 @@ export function FaceTab({
                     key={sid}
                     className="flex items-center gap-2 rounded-md border border-emerald-300 bg-white p-2 text-xs"
                   >
-                    <Avatar className="h-8 w-8">
-                      {s?.photo_url ? (
-                        <AvatarImage
-                          src={s.photo_url}
-                          alt={s.name}
-                          className="object-cover"
-                        />
-                      ) : null}
+                    <Avatar className="h-7 w-7">
+                      {s?.photo_url ? <AvatarImage src={s.photo_url} alt={s.name} className="object-cover" /> : null}
                       <AvatarFallback>{s?.name?.slice(0, 1) ?? "?"}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <p className="font-semibold text-emerald-900">{s?.name ?? sid}</p>
                       <p className="text-[10px] text-emerald-700">
-                        已於 {formatTime(new Date())}{" "}
-                        {scanType === "ON" ? "上車" : "落車"} ({pickupPoint || "人臉辨識"})
+                        {formatTime(new Date())} · {scanType === "ON" ? "上車" : "落車"}
                       </p>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <button
-              onClick={() => setCheckLogTriggeredIds(new Set())}
-              className="text-[11px] text-emerald-700 underline hover:text-emerald-900"
-            >
-              <Trash2 className="mr-1 inline h-3 w-3" /> 清空本批紀錄
-            </button>
           </CardContent>
         </Card>
       ) : null}
 
-      {/* ── 測試小提示 ── */}
+      {/* ── 除錯提示 ── */}
       <Card className="border-amber-200 bg-amber-50/40">
         <CardContent className="space-y-1 p-3 text-[11px] text-amber-900">
           <div className="flex items-center gap-1 font-semibold">
-            <AlertTriangle className="h-3 w-3" /> 首次測試建議
+            <AlertTriangle className="h-3 w-3" /> 如偵測不到人臉
           </div>
-          <ul className="space-y-0.5 pl-4">
-            <li>① 先按「下載模型」等待三個模型都變成 ✅。</li>
-            <li>② 按「啟動相機」並允許瀏覽器存取鏡頭。</li>
-            <li>③ 按「測試模式」確認畫面能正確框住人臉。</li>
-            <li>④ 按「建立 / 重建特徵」處理所有有照片的學生。</li>
-            <li>⑤ 切換到「識別模式」即可自動比對並打卡。</li>
-            <li>門檻 <code>{MATCH_DISTANCE_THRESHOLD}</code> 越低越嚴格。</li>
+          <ul className="ml-4 space-y-0.5">
+            <li>① 確認臉部光線充足，無遮擋</li>
+            <li>② 確認使用 HTTPS（模型需從 CDN 下載）</li>
+            <li>③ 嘗試切換「翻轉」使用前鏡頭</li>
+            <li>④ 若模型下載失敗，嘗試 <code>npm run dev:tunnel</code></li>
+            <li>⑤ threshold 設為 0.3（已放寬），仍失敗請更新瀏覽器</li>
           </ul>
         </CardContent>
       </Card>
@@ -987,37 +958,13 @@ export function FaceTab({
   );
 }
 
-/* ── 子組件 ── */
-
-function ModelBadge({
-  name,
-  status,
-}: {
-  name: string;
-  status: "idle" | "loading" | "ready" | "error";
-}) {
-  const variant =
-    status === "ready"
-      ? "success"
-      : status === "loading"
-      ? "secondary"
-      : status === "error"
-      ? "destructive"
-      : "outline";
-  const label =
-    status === "idle"
-      ? "未下載"
-      : status === "loading"
-      ? "下載中…"
-      : status === "ready"
-      ? "就緒"
-      : "失敗";
+function ModelBadge({ name, status }: { name: string; status: "idle" | "loading" | "ready" | "error" }) {
+  const variant = status === "ready" ? "success" : status === "loading" ? "secondary" : status === "error" ? "destructive" : "outline";
+  const label = status === "idle" ? "未下載" : status === "loading" ? "…" : status === "ready" ? "✅" : "❌";
   return (
-    <span className="inline-flex items-center justify-between rounded-md border border-slate-200 bg-white px-2 py-1">
-      <span className="text-slate-700">{name}</span>
-      <Badge variant={variant} className="text-[10px]">
-        {label}
-      </Badge>
+    <span className="inline-flex items-center justify-between rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700">
+      <span>{name}</span>
+      <Badge variant={variant} className="text-[10px]">{label}</Badge>
     </span>
   );
 }
