@@ -18,6 +18,7 @@ import {
 import { RollCallTab } from "@/components/scan/tabs/roll-call-tab";
 import { QrCodeTab } from "@/components/scan/tabs/qrcode-tab";
 import { FaceTab } from "@/components/scan/tabs/face-tab";
+import { FaceApiProvider } from "@/lib/face-api-context";
 import { supabase } from "@/lib/supabase";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import type {
@@ -395,14 +396,16 @@ export function ScanInDashboardClient({
             value="face"
             className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0"
           >
-            <FaceTab
-              trip={trip}
-              students={allStudents.length > 0 ? allStudents : students}
-              logs={logs}
-              pickupPoint={pickupPoint}
-              onAfterCheck={() => undefined}
-              onLogInsert={handleFaceLogInsert}
-            />
+            <FaceApiProvider>
+              <FaceTab
+                trip={trip}
+                students={allStudents.length > 0 ? allStudents : students}
+                logs={logs}
+                pickupPoint={pickupPoint}
+                onAfterCheck={() => undefined}
+                onLogInsert={handleFaceLogInsert}
+              />
+            </FaceApiProvider>
           </TabsContent>
         </Tabs>
       </div>

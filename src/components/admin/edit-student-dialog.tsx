@@ -126,12 +126,19 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
       >
         <Pencil className="mr-1 h-3 w-3" /> 編輯
       </Button>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>編輯學生資料</DialogTitle>
           <DialogDescription>修改後按「儲存」以更新資料</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+
+        {/* 可滾動的表單區 */}
+        <form
+          id="edit-student-form"
+          onSubmit={handleSubmit}
+          className="flex-1 space-y-3 overflow-y-auto pr-1"
+          style={{ maxHeight: "calc(90vh - 10rem)" }}
+        >
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">學生姓名 *</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：陳小強" />
@@ -166,7 +173,7 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
             <label className="text-xs font-medium text-slate-600">家長電話 (WhatsApp) *</label>
             <Input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+85261234567" />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 pb-2">
             <label className="text-xs font-medium text-slate-600">所屬校巴 *</label>
             <select
               value={busId}
@@ -181,15 +188,17 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
               ))}
             </select>
           </div>
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-              取消
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 儲存中…</> : "儲存"}
-            </Button>
-          </DialogFooter>
         </form>
+
+        {/* 固定在底部的按鈕列 */}
+        <DialogFooter className="shrink-0 border-t pt-3">
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
+            取消
+          </Button>
+          <Button type="submit" form="edit-student-form" disabled={submitting}>
+            {submitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 儲存中…</> : "儲存"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

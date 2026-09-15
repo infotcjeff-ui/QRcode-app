@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * 人臉註冊元件（使用 FaceApiContext 共享模型）
+ *
+ * 使用流程：
+ *  1. 掛載時從 localStorage 讀取是否已 Enroll
+ *  2. 啟動相機後使用 context 已預載入的模型，無需重複下載
+ *  3. 取樣 3 張後平均，取出 128 維 descriptor 存入 localStorage
+ *  4. FaceTab 啟動時自動從 localStorage 讀取，命中後打卡
+ *
+ * Storage key: `bus-face-descriptors` → Map<studentId, EnrolledRecord>
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -11,70 +23,54 @@ import {
   Trash2,
   X,
   AlertCircle,
-  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useFaceApi } from "@/lib/face-api-context";
 
-/** localStorage key 前綴 */
 const FACE_DESCRIPTORS_KEY = "bus-face-descriptors";
-/** face-api 模型 CDN URL — 使用 gh-pages 靜態資源（最穩定） */
-const FACE_MODEL_BASE_URL =
-  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/";
 
 type EnrolledRecord = {
-  /** Unix ms timestamp，記錄何時建立/更新 */
   enrolledAt: number;
-  /** face-api 產生的 128 維 Float32Array 轉成普通 number[] */
   descriptor: number[];
 };
 
 type Props = {
   studentId: string;
   studentName: string;
-  /** 外層可讀取目前是否已 Enroll（由父層管理顯示狀態） */
   onEnrollStatusChange?: (enrolled: boolean) => void;
 };
 
-/**
- * 人臉註冊元件：
- *  - 嵌入 EditStudentDialog，供管理員直接拍攝學生人臉
- *  - 使用 face-api 提取 128 維 descriptor，存入 localStorage
- *  - 讀取 / 寫入共用同一個 localStorage key，避免重複 Enroll
- *
- * Storage key: `bus-face-descriptors` → Map<studentId, EnrolledRecord>
- */
+type RawDetection = {
+  detection: { box: { x: number; y: number; width: number; height: number } };
+  descriptor?: Float32Array;
+};
+
 export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }: Props) {
+  const { sdk, modelState, allReady, anyError, isLoading, preload } = useFaceApi();
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [faceApi, setFaceApi] = useState<typeof import("@vladmandic/face-api") | null>(null);
-  const [modelStatus, setModelStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [camState, setCamState] = useState<"idle" | "requesting" | "active" | "denied" | "error">("idle");
   const [camError, setCamError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState(false);
-  const [enrolling, setEnrolling] = useState(false); // 正在取樣中
-  const [sampleCount, setSampleCount] = useState(0); // 已取樣張數
-  const [detected, setDetected] = useState(false); // 相機內是否有人臉
-  const [previewBox, setPreviewBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [sampleCount, setSampleCount] = useState(0);
+  const [detected, setDetected] = useState(false);
 
-  // ── 初始化：載入 face-api SDK ─────────────────────────
+  const CAPTURE_SAMPLES = 3;
+  const descriptorsRef = useRef<Float32Array[]>([]);
+
+  // ── 讀取 localStorage ──────────────────────────────
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const mod = await import("@vladmandic/face-api");
-        if (mounted) setFaceApi(mod);
-      } catch (e) {
-        console.error("[FaceEnrollment] SDK load failed", e);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    const stored = loadDescriptors();
+    const isEnrolled = stored.has(studentId);
+    setEnrolled(isEnrolled);
+    onEnrollStatusChange?.(isEnrolled);
+  }, [studentId, onEnrollStatusChange]);
 
   // ── 卸載清理 ────────────────────────────────────────
   useEffect(() => {
@@ -82,15 +78,6 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
       stopCamera();
     };
   }, []);
-
-  // ── 讀取 localStorage 確認是否已 Enroll ──────────────
-  useEffect(() => {
-    const stored = loadDescriptors();
-    const record = stored.get(studentId);
-    const isEnrolled = !!record;
-    setEnrolled(isEnrolled);
-    onEnrollStatusChange?.(isEnrolled);
-  }, [studentId, onEnrollStatusChange]);
 
   const stopCamera = useCallback(() => {
     if (rafRef.current !== null) {
@@ -107,7 +94,6 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
     }
     setCamState("idle");
     setDetected(false);
-    setPreviewBox(null);
   }, []);
 
   // ── 啟動相機 ────────────────────────────────────────
@@ -120,9 +106,12 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
     setCamState("requesting");
     setCamError(null);
     try {
+      // 模型若尚未開始下載，先觸發一次（提前預熱）
+      preload();
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "user", // 前鏡頭自拍
+          facingMode: "user",
           width: { ideal: 320 },
           height: { ideal: 240 },
         },
@@ -134,49 +123,29 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
         await videoRef.current.play();
       }
       setCamState("active");
-
-      // 模型還沒下載 → 自動下載
-      if (modelStatus === "idle") {
-        void loadModels();
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "無法啟動相機";
       setCamError(msg);
-      setCamState(msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission") ? "denied" : "error");
+      setCamState(
+        msg.toLowerCase().includes("denied") || msg.toLowerCase().includes("permission")
+          ? "denied"
+          : "error"
+      );
     }
-  }, [modelStatus]);
+  }, [preload]);
 
-  // ── 下載 face-api 模型 ────────────────────────────────
-  const loadModels = useCallback(async () => {
-    if (!faceApi) return;
-    setModelStatus("loading");
-    try {
-      await faceApi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_BASE_URL);
-      await faceApi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_BASE_URL);
-      await faceApi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_BASE_URL);
-      setModelStatus("ready");
-    } catch (e) {
-      console.error("[FaceEnrollment] model load failed", e);
-      setModelStatus("error");
-    }
-  }, [faceApi]);
-
-  // ── 拍攝並 Enroll ───────────────────────────────────
-  // 對同一人取 3 次樣取平均，提升準確度
-  const CAPTURE_SAMPLES = 3;
-  const descriptors: Float32Array[] = [];
-
+  // ── 拍攝取樣 + 存入 localStorage ─────────────────────
   const captureAndEnroll = useCallback(async () => {
-    if (!faceApi || !videoRef.current || modelStatus !== "ready") return;
+    if (!sdk || !videoRef.current || !allReady) return;
 
     setEnrolling(true);
     setSampleCount(0);
-    descriptors.length = 0;
+    descriptorsRef.current = [];
 
     const video = videoRef.current;
-    const detectorOptions = new faceApi.TinyFaceDetectorOptions({
-      inputSize: 320, // 輸入越小越快，default 416
-      scoreThreshold: 0.3, // 放寬門檻，增加偵測成功率
+    const detectorOptions = new sdk.TinyFaceDetectorOptions({
+      inputSize: 320,
+      scoreThreshold: 0.3,
     });
 
     const tick = async () => {
@@ -186,26 +155,23 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
       }
 
       try {
-        const results = await faceApi
-          .detectAllFaces(video, detectorOptions)
-          .withFaceLandmarks()
-          .withFaceDescriptors();
+        const task = sdk.detectAllFaces(video, detectorOptions).withFaceLandmarks().withFaceDescriptors() as unknown as Promise<RawDetection[]>;
+        const results = await task;
 
-        if (results.length > 0) {
+        if (results && results.length > 0) {
           const r = results[0];
-          // 繪製偵測框
           drawPreview(r.detection.box);
           setDetected(true);
 
-          if (descriptors.length < CAPTURE_SAMPLES) {
-            // 自動取樣：每隔 0.5s 取一張
-            descriptors.push(r.descriptor);
-            setSampleCount(descriptors.length);
-            if (descriptors.length === CAPTURE_SAMPLES) {
-              // 取樣完成 → 平均 → 存 localStorage
+          if (descriptorsRef.current.length < CAPTURE_SAMPLES) {
+            const desc = r.descriptor;
+            if (desc) descriptorsRef.current.push(desc);
+            setSampleCount(descriptorsRef.current.length);
+
+            if (descriptorsRef.current.length === CAPTURE_SAMPLES) {
               cancelAnimationFrame(rafRef.current!);
               rafRef.current = null;
-              const avg = averageDescriptors(descriptors);
+              const avg = averageDescriptors(descriptorsRef.current);
               saveDescriptor(studentId, avg);
               setEnrolled(true);
               onEnrollStatusChange?.(true);
@@ -216,7 +182,7 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
           }
         } else {
           setDetected(false);
-          setPreviewBox(null);
+          clearCanvas();
         }
       } catch {
         // 忽略單幀失敗
@@ -226,7 +192,7 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
     };
 
     rafRef.current = requestAnimationFrame(tick);
-  }, [faceApi, modelStatus, studentId, onEnrollStatusChange, stopCamera]);
+  }, [sdk, allReady, studentId, onEnrollStatusChange, stopCamera]);
 
   const cancelEnrollment = useCallback(() => {
     if (rafRef.current !== null) {
@@ -235,9 +201,9 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
     }
     setEnrolling(false);
     setSampleCount(0);
-    descriptors.length = 0;
+    descriptorsRef.current = [];
     setDetected(false);
-    setPreviewBox(null);
+    clearCanvas();
   }, []);
 
   const deleteEnrollment = useCallback(() => {
@@ -246,36 +212,38 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
     onEnrollStatusChange?.(false);
   }, [studentId, onEnrollStatusChange]);
 
-  // ── Canvas 繪製偵測框 ────────────────────────────────
+  // ── Canvas helpers ──────────────────────────────────
+  function clearCanvas() {
+    if (!canvasRef.current || !videoRef.current) return;
+    const ctx = canvasRef.current.getContext("2d");
+    if (!ctx) return;
+    canvasRef.current.width = videoRef.current.videoWidth || 320;
+    canvasRef.current.height = videoRef.current.videoHeight || 240;
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  }
+
   function drawPreview(box: { x: number; y: number; width: number; height: number }) {
     if (!canvasRef.current || !videoRef.current) return;
     const canvas = canvasRef.current;
-    const video = videoRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // 同步 canvas 大小
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || 320;
-      canvas.height = video.videoHeight || 240;
+    if (canvas.width !== videoRef.current.videoWidth || canvas.height !== videoRef.current.videoHeight) {
+      canvas.width = videoRef.current.videoWidth || 320;
+      canvas.height = videoRef.current.videoHeight || 240;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 偵測框
     ctx.strokeStyle = "#10b981";
     ctx.lineWidth = 2;
     ctx.strokeRect(box.x, box.y, box.width, box.height);
-
-    // 標籤
     ctx.fillStyle = "#10b981";
     ctx.font = "bold 12px sans-serif";
     const label = `${studentName} (取樣 ${sampleCount}/${CAPTURE_SAMPLES})`;
-    const textW = ctx.measureText(label).width;
-    ctx.fillRect(box.x, box.y - 20, textW + 8, 20);
+    const tw = ctx.measureText(label).width;
+    ctx.fillRect(box.x, box.y - 20, tw + 8, 20);
     ctx.fillStyle = "#fff";
     ctx.fillText(label, box.x + 4, box.y - 6);
-
-    setPreviewBox({ x: box.x, y: box.y, w: box.width, h: box.height });
   }
 
   // ── Descriptor 平均 ─────────────────────────────────
@@ -322,24 +290,49 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
 
   const isCamActive = camState === "active";
 
+  // ── 提前下載模型按鈕（可隨時呼叫）───────────────────
+  const handlePreload = useCallback(() => {
+    preload();
+  }, [preload]);
+
   return (
-    <div className="space-y-3">
-      {/* ── 狀態列 ── */}
+    <div className="space-y-2">
+      {/* 狀態列 */}
       <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
         <div className="flex items-center gap-2">
           <ScanFace className="h-4 w-4 text-slate-600" />
           <span className="font-medium text-slate-700">人臉辨識</span>
         </div>
-        {enrolled ? (
-          <Badge variant="success" className="text-[10px]">
-            <CheckCircle2 className="mr-1 h-3 w-3" /> 已註冊
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="text-[10px]">未註冊</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {/* 提前下載按鈕 */}
+          {!allReady && !anyError && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[10px] text-slate-500 hover:text-slate-700"
+              onClick={handlePreload}
+              disabled={isLoading || !sdk}
+              title="提前下載模型，加快日後使用速度"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-3 w-3" />
+              )}
+              {isLoading ? "下載中…" : "預載模型"}
+            </Button>
+          )}
+          {enrolled ? (
+            <Badge variant="success" className="text-[10px]">
+              <CheckCircle2 className="mr-1 h-3 w-3" /> 已註冊
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px]">未註冊</Badge>
+          )}
+        </div>
       </div>
 
-      {/* ── 已註冊狀態 → 顯示操作 ── */}
+      {/* ── 已註冊 → 顯示操作 ── */}
       {enrolled ? (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
@@ -350,18 +343,7 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
             </span>
           </div>
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                if (!faceApi) {
-                  const mod = await import("@vladmandic/face-api");
-                  setFaceApi(mod);
-                }
-                await startCamera();
-              }}
-              className="flex-1"
-            >
+            <Button size="sm" variant="outline" onClick={startCamera} className="flex-1">
               <RefreshCw className="mr-1 h-3 w-3" /> 重新拍攝
             </Button>
             <Button
@@ -376,38 +358,31 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
         </div>
       ) : null}
 
-      {/* ── 相機預覽 ── */}
+      {/* ── 未註冊 → 相機預覽 ── */}
       {!enrolled && (
         <div className="space-y-2">
-          {/* 模型狀態提示 */}
-          {modelStatus === "error" ? (
+          {/* 模型 / 相機狀態提示 */}
+          {anyError ? (
             <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-700">
               <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
               <span>模型下載失敗（需 HTTPS）。請使用 <code>npm run dev:tunnel</code> 或部署後操作。</span>
             </div>
-          ) : modelStatus === "idle" || modelStatus === "loading" ? (
+          ) : !sdk ? (
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-500">
-              {modelStatus === "loading" ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <ScanFace className="h-3 w-3" />
-              )}
-              {modelStatus === "loading" ? "下載模型中…" : "按下啟動相機後將自動下載模型"}
+              <Loader2 className="h-3 w-3 animate-spin" />
+              載入 face-api SDK 中…
+            </div>
+          ) : !allReady && !isLoading ? (
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-500">
+              <RefreshCw className="h-3 w-3" />
+              按「預載模型」可提前下載，節省相機啟動時間
             </div>
           ) : null}
 
           {/* 預覽區 */}
           <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-slate-900">
-            <video
-              ref={videoRef}
-              className="absolute inset-0 h-full w-full object-cover"
-              muted
-              playsInline
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+            <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+            <canvas ref={canvasRef} className="absolute inset-0 h-full w-full object-cover" />
             {!isCamActive ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-slate-900/90 text-slate-100">
                 <CameraOff className="h-6 w-6 opacity-60" />
@@ -416,7 +391,7 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
             ) : null}
           </div>
 
-          {/* 相機控制列 */}
+          {/* 控制列 */}
           <div className="flex items-center gap-2">
             {!isCamActive ? (
               <Button
@@ -434,7 +409,6 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
               </Button>
             ) : enrolling ? (
               <>
-                {/* 取樣進度 */}
                 <div className="flex flex-1 items-center gap-2">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
                     <div
@@ -442,34 +416,24 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
                       style={{ width: `${(sampleCount / CAPTURE_SAMPLES) * 100}%` }}
                     />
                   </div>
-                  <span className="text-xs text-emerald-600 font-medium whitespace-nowrap">
+                  <span className="text-xs font-medium text-emerald-600 whitespace-nowrap">
                     {sampleCount}/{CAPTURE_SAMPLES}
                   </span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={cancelEnrollment}
-                  className="shrink-0"
-                >
+                <Button size="sm" variant="outline" onClick={cancelEnrollment} className="shrink-0">
                   <X className="h-3 w-3" />
                 </Button>
               </>
             ) : (
               <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={stopCamera}
-                  className="shrink-0"
-                >
+                <Button size="sm" variant="outline" onClick={stopCamera} className="shrink-0">
                   <CameraOff className="h-3 w-3" />
                 </Button>
                 <Button
                   size="sm"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
                   onClick={captureAndEnroll}
-                  disabled={modelStatus !== "ready" || !isCamActive}
+                  disabled={!allReady}
                 >
                   <Camera className="mr-1 h-3 w-3" />
                   拍攝人臉
@@ -478,14 +442,12 @@ export function FaceEnrollment({ studentId, studentName, onEnrollStatusChange }:
             )}
           </div>
 
-          {/* 操作提示 */}
+          {/* 提示文字 */}
           {!enrolling && isCamActive && (
             <p className="text-center text-[10px] text-slate-400">
-              {modelStatus === "ready"
+              {allReady
                 ? "✅ 請讓學生面向鏡頭，系統會自動取樣 3 張"
-                : modelStatus === "loading"
-                ? "模型下載完成後自動開始取樣…"
-                : "等待相機啟動…"}
+                : "等待模型下載完成…"}
             </p>
           )}
           {enrolling && (

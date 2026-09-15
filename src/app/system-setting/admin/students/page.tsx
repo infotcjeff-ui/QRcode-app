@@ -2,6 +2,7 @@ import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/lib/supabase-serv
 import type { Bus, Student } from "@/lib/types";
 import { StudentsPageClient } from "@/components/admin/students-page-client";
 import { PageHeader } from "@/components/ui/page-header";
+import { FaceApiProvider } from "@/lib/face-api-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,7 +37,9 @@ export default async function StudentsPage() {
       <PageHeader title="學生管理" href="/system-setting" />
 
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-28 pt-5 sm:px-6 lg:px-8">
-        <StudentsPageClient initialStudents={students} buses={buses} />
+        <FaceApiProvider>
+          <StudentsPageClient initialStudents={students} buses={buses} />
+        </FaceApiProvider>
       </div>
     </main>
   );
