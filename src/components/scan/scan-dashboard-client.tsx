@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { QrScanner } from "@/components/scan/qr-scanner";
 import { useToast } from "@/components/ui/toast-context";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { formatTime, isValidUuid } from "@/lib/utils";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { useGeolocation } from "@/lib/use-geolocation";
@@ -476,7 +477,9 @@ export function ScanDashboardClient({
   }
 
   return (
-    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset pb-24">
+    <main className="relative flex h-svh w-full flex-col bg-slate-50">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex flex-col gap-3 px-3 py-4 pb-24 sm:px-4">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -699,72 +702,78 @@ export function ScanDashboardClient({
           </TabsList>
 
           {/* ── 上落車打卡 Tab ── */}
-          <TabsContent value="scan" className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0">
-            {/* Switch Button */}
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
-              <span className={`text-sm font-medium ${scanTab === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
-                上車打卡
-              </span>
-              <button
-                onClick={() => {
-                  setTabSwitching(true);
-                  setScanTab(scanTab === "ON" ? "OFF" : "ON");
-                  setTimeout(() => setTabSwitching(false), 300);
-                }}
-                className={`relative flex h-7 w-14 items-center rounded-full px-1 transition-colors ${
-                  scanTab === "OFF" ? "bg-emerald-500" : "bg-slate-300"
-                }`}
-              >
-                <span
-                  className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    scanTab === "OFF" ? "translate-x-7" : "translate-x-1"
-                  }`}
-                />
-              </button>
-              <span className={`text-sm font-medium ${scanTab === "OFF" ? "text-emerald-600" : "text-slate-400"}`}>
-                落車打卡
-              </span>
-            </div>
-
-            {/* QR Scanner */}
-            {tabSwitching ? (
-              <TabSkeleton />
-            ) : (
-              <QrScanner onScan={handleScan} />
-            )}
-
-            {/* 已完成上車掃瞄 / 落車掃瞄 */}
-            <Section
-              icon={scanTab === "ON" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CheckCircle className="h-4 w-4 text-sky-600" />}
-              title={scanTab === "ON" ? `已完成上車掃瞄 (${totalOn}/${students.length})` : `已完成落車掃瞄 (${totalOff}/${students.length})`}
-            >
-              {logs.filter((l) => l.type === scanTab).length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
-                  {scanTab === "ON" ? "尚未有學生上車" : "尚未有學生落車"}
+          <TabsContent value="scan" className="mt-3 flex-1 min-h-0 overflow-hidden">
+            <OverlayScrollbar className="h-full">
+              <div className="space-y-3 pr-1">
+                {/* Switch Button */}
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3">
+                  <span className={`text-sm font-medium ${scanTab === "ON" ? "text-emerald-600" : "text-slate-400"}`}>
+                    上車打卡
+                  </span>
+                  <button
+                    onClick={() => {
+                      setTabSwitching(true);
+                      setScanTab(scanTab === "ON" ? "OFF" : "ON");
+                      setTimeout(() => setTabSwitching(false), 300);
+                    }}
+                    className={`relative flex h-7 w-14 items-center rounded-full px-1 transition-colors ${
+                      scanTab === "OFF" ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        scanTab === "OFF" ? "translate-x-7" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-sm font-medium ${scanTab === "OFF" ? "text-emerald-600" : "text-slate-400"}`}>
+                    落車打卡
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {logs
-                    .filter((l) => l.type === scanTab)
-                    .map((log) => (
-                      <StudentRow
-                        key={log.id}
-                        student={log.student}
-                        location={log.location_name}
-                        variant={scanTab === "ON" ? "success" : "info"}
-                        timestamp={log.timestamp}
-                        showCancelButton={isAdminUser}
-                        onCancel={() => requestCancel(log)}
-                        highlight={recentlyAddedLogIds.has(log.id)}
-                      />
-                    ))}
-                </div>
-              )}
-            </Section>
+
+                {/* QR Scanner */}
+                {tabSwitching ? (
+                  <TabSkeleton />
+                ) : (
+                  <QrScanner onScan={handleScan} />
+                )}
+
+                {/* 已完成上車掃瞄 / 落車掃瞄 */}
+                <Section
+                  icon={scanTab === "ON" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <CheckCircle className="h-4 w-4 text-sky-600" />}
+                  title={scanTab === "ON" ? `已完成上車掃瞄 (${totalOn}/${students.length})` : `已完成落車掃瞄 (${totalOff}/${students.length})`}
+                >
+                  {logs.filter((l) => l.type === scanTab).length === 0 ? (
+                    <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs text-slate-400">
+                      {scanTab === "ON" ? "尚未有學生上車" : "尚未有學生落車"}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {logs
+                        .filter((l) => l.type === scanTab)
+                        .map((log) => (
+                          <StudentRow
+                            key={log.id}
+                            student={log.student}
+                            location={log.location_name}
+                            variant={scanTab === "ON" ? "success" : "info"}
+                            timestamp={log.timestamp}
+                            showCancelButton={isAdminUser}
+                            onCancel={() => requestCancel(log)}
+                            highlight={recentlyAddedLogIds.has(log.id)}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </Section>
+              </div>
+            </OverlayScrollbar>
           </TabsContent>
 
           {/* ── 本次資訊 Tab ── */}
-          <TabsContent value="info" className="mt-3 space-y-4 overflow-y-auto flex-1 min-h-0 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400">
+          <TabsContent value="info" className="mt-3 flex-1 min-h-0 overflow-hidden">
+            <OverlayScrollbar className="h-full">
+              <div className="space-y-4 pr-1">
           {/* ── 即時 Google Map ── */}
           <Section
             icon={<MapIcon className="h-4 w-4 text-emerald-600" />}
@@ -893,9 +902,13 @@ export function ScanDashboardClient({
               );
             })()}
           </Section>
-        </TabsContent>
+              </div>
+            </OverlayScrollbar>
+          </TabsContent>
         </Tabs>
       </div>
+        </div>
+      </OverlayScrollbar>
     </main>
   );
 }

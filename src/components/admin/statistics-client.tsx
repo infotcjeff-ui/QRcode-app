@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/toast-context";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { formatDateTime } from "@/lib/utils";
 import type {
   Bus,
@@ -509,8 +510,9 @@ function ReportDetailPopup({
   onClose: () => void;
 }) {
   return (
-    <DialogContent className="inset-x-0 top-[50%] max-h-[90vh] overflow-y-auto border-2 border-emerald-500 p-6 !translate-x-0 !translate-y-[-50%] scrollbar-inset">
-      <DialogHeader>
+    <DialogContent className="inset-x-0 top-[50%] max-h-[90vh] border-2 border-emerald-500 p-6 !translate-x-0 !translate-y-[-50%]">
+      <OverlayScrollbar className="max-h-[calc(90vh-3rem)]">
+        <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-lg">
           <Activity className="h-5 w-5 text-emerald-600" /> {report.title}
         </DialogTitle>
@@ -550,6 +552,7 @@ function ReportDetailPopup({
       <div className="space-y-5">
         <ReportBody report={report} />
       </div>
+      </OverlayScrollbar>
     </DialogContent>
   );
 }

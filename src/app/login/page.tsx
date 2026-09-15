@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast-context";
 import {
@@ -97,8 +98,10 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="relative flex h-svh w-full flex-col items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
-      <div className="w-full max-w-md">
+    <main className="relative flex h-svh w-full flex-col bg-gradient-to-br from-slate-50 via-white to-emerald-50">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex min-h-full flex-col items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg">
             <Bus className="h-7 w-7" />
@@ -165,6 +168,8 @@ function LoginPageContent() {
           </form>
         </div>
       </div>
+        </div>
+      </OverlayScrollbar>
     </main>
   );
 }

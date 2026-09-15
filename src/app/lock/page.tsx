@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Bus, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import {
   setSiteAccessCookie,
   verifySitePassword,
@@ -103,14 +104,16 @@ function LockPageContent() {
   }
 
   return (
-    <main className="flex h-svh w-full flex-col items-center justify-center overflow-y-auto bg-slate-950 px-4 py-10 text-slate-100">
+    <main className="relative flex h-svh w-full flex-col bg-slate-950 text-slate-100">
       {/* 背景裝飾 */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="absolute bottom-[-160px] right-[-120px] h-[360px] w-[360px] rounded-full bg-sky-500/15 blur-3xl" />
       </div>
 
-      <div className="w-full max-w-md">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex min-h-full flex-col items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30">
             <Bus className="h-7 w-7" />
@@ -186,7 +189,9 @@ function LockPageContent() {
         <p className="mt-6 text-center text-[11px] text-slate-500">
           此頁面僅供授權人員使用。所有連線會被記錄。
         </p>
-      </div>
+        </div>
+        </div>
+      </OverlayScrollbar>
     </main>
   );
 }

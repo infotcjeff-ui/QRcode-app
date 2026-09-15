@@ -86,33 +86,53 @@
 }
 
 /* -----------------------------------------------------------------------
- * Insert-style scrollbar
- *  - 整個站台用戶捲動區使用 inset (overlay) 滾動條，
- *    不佔版面空間，視覺上更貼近內容。
- *  - 仍可在桌面瀏覽器滾輪 / 觸控裝置滑動。
+ * OverlayScrollbars 自訂樣式
+ *  - 透過 CSS 變數將滾動條統一為極幼圓角 thumb（~6px）
+ *  - 透明 track、hover 時 thumb 顏色加深
+ *  - dark mode 自動調亮 thumb 顏色
+ *
+ * 注意：OverlayScrollbars 會自動把 `os-theme-dark` / `os-theme-light`
+ * 加到 .os-scrollbar 上，並定義自己的 --os-handle-bg 等變數。
+ * 我們需要在更高的選擇器優先度上覆寫一次才能壓過主題預設。
  * --------------------------------------------------------------------- */
-@layer utilities {
-  .scrollbar-inset {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(15, 23, 42, 0.25) transparent;
-  }
-  .scrollbar-inset::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  .scrollbar-inset::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .scrollbar-inset::-webkit-scrollbar-thumb {
-    background-color: rgba(15, 23, 42, 0.25);
-    border-radius: 9999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-  .scrollbar-inset:hover::-webkit-scrollbar-thumb,
-  .scrollbar-inset:focus-within::-webkit-scrollbar-thumb {
-    background-color: rgba(15, 23, 42, 0.4);
-  }
+.os-scrollbar.os-scrollbar {
+  --os-size: 6px;
+  --os-padding-perpendicular: 0;
+  --os-track-bg: transparent;
+  --os-track-bg-hover: transparent;
+  --os-track-bg-active: transparent;
+  --os-track-border: 0;
+  --os-track-border-hover: 0;
+  --os-track-border-active: 0;
+  --os-track-border-radius: 9999px;
+  --os-handle-bg: rgba(15, 23, 42, 0.28);
+  --os-handle-bg-hover: rgba(15, 23, 42, 0.45);
+  --os-handle-bg-active: rgba(15, 23, 42, 0.55);
+  --os-handle-border: 0;
+  --os-handle-border-hover: 0;
+  --os-handle-border-active: 0;
+  --os-handle-border-radius: 9999px;
+  --os-handle-min-size: 36px;
+  --os-handle-max-size: 100%;
+  --os-handle-perpendicular-size: 100%;
+  --os-handle-perpendicular-size-hover: 100%;
+  --os-handle-perpendicular-size-active: 100%;
+  --os-handle-interactive-area-offset: 6px;
+}
+
+/* 全站套 .dark class 時切換為淺色 thumb */
+.dark .os-scrollbar.os-scrollbar {
+  --os-handle-bg: rgba(226, 232, 240, 0.28);
+  --os-handle-bg-hover: rgba(226, 232, 240, 0.45);
+  --os-handle-bg-active: rgba(226, 232, 240, 0.55);
+}
+
+/* 鎖屏頁使用深色背景，但頁面沒套 .dark class，這裡額外覆寫讓 thumb 顯示為淺色 */
+.bg-slate-950 .os-scrollbar.os-scrollbar,
+.bg-slate-900 .os-scrollbar.os-scrollbar {
+  --os-handle-bg: rgba(226, 232, 240, 0.28);
+  --os-handle-bg-hover: rgba(226, 232, 240, 0.5);
+  --os-handle-bg-active: rgba(226, 232, 240, 0.6);
 }
 
 #qr-reader__dashboard_section_csr button {

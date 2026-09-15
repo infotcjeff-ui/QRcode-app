@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/components/ui/toast-context";
 import { MediaUpload } from "@/components/ui/media-upload";
 import { FaceEnrollment } from "@/components/admin/face-enrollment";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import type { Bus, Student } from "@/lib/types";
 import { Loader2, Pencil } from "lucide-react";
 
@@ -136,9 +137,11 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
         <form
           id="edit-student-form"
           onSubmit={handleSubmit}
-          className="flex-1 space-y-3 overflow-y-auto pr-1"
+          className="flex-1 pr-1"
           style={{ maxHeight: "calc(90vh - 10rem)" }}
         >
+          <OverlayScrollbar className="h-full">
+            <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600">學生姓名 *</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：陳小強" />
@@ -188,6 +191,8 @@ export function EditStudentDialog({ student, buses, onUpdated }: Props) {
               ))}
             </select>
           </div>
+            </div>
+          </OverlayScrollbar>
         </form>
 
         {/* 固定在底部的按鈕列 */}

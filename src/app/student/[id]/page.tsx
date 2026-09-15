@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, MapPin, User } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { BackButton } from "@/components/ui/back-button";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { ParentRealtimeTracker } from "./parent-realtime-tracker";
 
 export const dynamic = "force-dynamic";
@@ -67,11 +68,13 @@ export default async function StudentParentPage({ params }: Props) {
   const initialCheckLog = initial.logs[0] ?? null;
 
   return (
-    <main className="flex w-full flex-col gap-4 overflow-auto bg-slate-50 px-4 py-6 scrollbar-inset">
-      <header className="flex items-center justify-between">
-        <BackButton fallback="/student" label="返回搜尋" />
-        <h1 className="text-sm font-medium text-slate-500">家長即時追蹤</h1>
-      </header>
+    <main className="relative flex h-svh w-full flex-col bg-slate-50">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex flex-col gap-4 px-4 py-6 pb-24">
+          <header className="flex items-center justify-between">
+            <BackButton fallback="/student" label="返回搜尋" />
+            <h1 className="text-sm font-medium text-slate-500">家長即時追蹤</h1>
+          </header>
 
       <Card className="border-emerald-200 bg-emerald-50">
         <CardHeader>
@@ -143,6 +146,8 @@ export default async function StudentParentPage({ params }: Props) {
       <footer className="mt-auto text-center text-[10px] text-slate-400">
         © School Bus Check-in · Realtime · Powered by Supabase
       </footer>
+        </div>
+      </OverlayScrollbar>
     </main>
   );
 }

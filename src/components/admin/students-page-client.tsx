@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { useToast } from "@/components/ui/toast-context";
 import { GraduationCap, QrCode as QrIcon, QrCode, Loader2, Download } from "lucide-react";
 import { DeleteStudentButton } from "@/components/admin/delete-student-button";
@@ -184,7 +185,9 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
   }
 
   return (
-    <div className="flex w-full flex-col gap-6 overflow-auto scrollbar-inset">
+    <div className="flex w-full flex-col gap-6 h-svh">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex flex-col gap-6 pr-1 pb-24">
       {/* 動作列：批次 QR Code / 新增學生 */}
       <div className="flex flex-wrap justify-end gap-2">
         <Button asChild variant="outline" size="sm">
@@ -379,6 +382,8 @@ export function StudentsPageClient({ initialStudents, buses }: Props) {
           )}
         </CardContent>
       </Card>
+        </div>
+      </OverlayScrollbar>
     </div>
   );
 }

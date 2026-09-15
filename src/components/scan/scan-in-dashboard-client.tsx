@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import {
   Bus as BusIcon,
   Loader2,
@@ -291,7 +292,9 @@ export function ScanInDashboardClient({
   }
 
   return (
-    <main className="flex w-full flex-col gap-3 overflow-auto bg-slate-50 px-3 py-4 sm:px-4 scrollbar-inset pb-24">
+    <main className="relative flex h-svh w-full flex-col bg-slate-50">
+      <OverlayScrollbar className="flex-1">
+        <div className="flex flex-col gap-3 px-3 py-4 pb-24 sm:px-4">
       {isInsecureContext ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           ⚠️ 偵測到非 HTTPS 連線。部分手機瀏覽器會封鎖相機權限。如無法啟動鏡頭或下載人臉模型，請改用 HTTPS tunnel (<code>npm run dev:tunnel</code>)。
@@ -351,64 +354,69 @@ export function ScanInDashboardClient({
           </TabsList>
 
           {/* 點名 */}
-          <TabsContent
-            value="rollcall"
-            className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0"
-          >
-            <RollCallTab
-              attendantAssignedBusId={attendant.assigned_bus_id}
-              allBuses={allBuses}
-              trip={trip}
-              bus={bus}
-              students={allStudents.length > 0 ? allStudents : students}
-              logs={logs}
-              onAfterCheck={handleRollCallAfter}
-              pickupPoint={pickupPoint}
-              onPickupPointChange={setPickupPoint}
-            />
+          <TabsContent value="rollcall" className="mt-3 flex-1 min-h-0 overflow-hidden">
+            <OverlayScrollbar className="h-full">
+              <div className="space-y-3 pr-1">
+                <RollCallTab
+                  attendantAssignedBusId={attendant.assigned_bus_id}
+                  allBuses={allBuses}
+                  trip={trip}
+                  bus={bus}
+                  students={allStudents.length > 0 ? allStudents : students}
+                  logs={logs}
+                  onAfterCheck={handleRollCallAfter}
+                  pickupPoint={pickupPoint}
+                  onPickupPointChange={setPickupPoint}
+                />
+              </div>
+            </OverlayScrollbar>
           </TabsContent>
 
           {/* QR Code */}
-          <TabsContent
-            value="qrcode"
-            className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0"
-          >
-            <QrCodeTab
-              attendant={attendant}
-              trip={trip}
-              bus={bus}
-              initialStudents={students}
-              initialLogs={logs}
-              supabaseConfigured={supabaseConfigured}
-              authUser={authUser}
-              realtimeStatus={realtimeStatus}
-              recentlyAddedLogIds={recentlyAddedLogIds}
-              pickupPoint={pickupPoint}
-              onPickupPointChange={setPickupPoint}
-              dropoffPoint={dropoffPoint}
-              onDropoffPointChange={setDropoffPoint}
-              onLogInsert={handleQrCodeLogInsert}
-            />
+          <TabsContent value="qrcode" className="mt-3 flex-1 min-h-0 overflow-hidden">
+            <OverlayScrollbar className="h-full">
+              <div className="space-y-3 pr-1">
+                <QrCodeTab
+                  attendant={attendant}
+                  trip={trip}
+                  bus={bus}
+                  initialStudents={students}
+                  initialLogs={logs}
+                  supabaseConfigured={supabaseConfigured}
+                  authUser={authUser}
+                  realtimeStatus={realtimeStatus}
+                  recentlyAddedLogIds={recentlyAddedLogIds}
+                  pickupPoint={pickupPoint}
+                  onPickupPointChange={setPickupPoint}
+                  dropoffPoint={dropoffPoint}
+                  onDropoffPointChange={setDropoffPoint}
+                  onLogInsert={handleQrCodeLogInsert}
+                />
+              </div>
+            </OverlayScrollbar>
           </TabsContent>
 
           {/* 人臉 */}
-          <TabsContent
-            value="face"
-            className="mt-3 space-y-3 overflow-y-auto flex-1 min-h-0"
-          >
-            <FaceApiProvider>
-              <FaceTab
-                trip={trip}
-                students={allStudents.length > 0 ? allStudents : students}
-                logs={logs}
-                pickupPoint={pickupPoint}
-                onAfterCheck={() => undefined}
-                onLogInsert={handleFaceLogInsert}
-              />
-            </FaceApiProvider>
+          <TabsContent value="face" className="mt-3 flex-1 min-h-0 overflow-hidden">
+            <OverlayScrollbar className="h-full">
+              <div className="space-y-3 pr-1">
+                <FaceApiProvider>
+                  <FaceTab
+                    trip={trip}
+                    students={allStudents.length > 0 ? allStudents : students}
+                    logs={logs}
+                    pickupPoint={pickupPoint}
+                    onAfterCheck={() => undefined}
+                    onLogInsert={handleFaceLogInsert}
+                  />
+                </FaceApiProvider>
+              </div>
+            </OverlayScrollbar>
           </TabsContent>
         </Tabs>
       </div>
+        </div>
+      </OverlayScrollbar>
     </main>
   );
 }

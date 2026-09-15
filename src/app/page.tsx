@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bus, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OverlayScrollbar } from "@/components/ui/overlay-scrollbar";
 import { getAuthUser, type AuthUser } from "@/lib/auth";
 import { getSystemTitle } from "@/lib/site-settings";
 
@@ -77,12 +78,15 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative flex h-svh w-full flex-col items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-10">
+    <main className="relative flex h-svh w-full flex-col bg-gradient-to-br from-slate-50 via-white to-emerald-50">
       {/* 裝飾背景 */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-40 right-[-120px] h-[420px] w-[420px] rounded-full bg-emerald-200/40 blur-3xl" />
         <div className="absolute bottom-[-160px] left-[-100px] h-[360px] w-[360px] rounded-full bg-sky-200/40 blur-3xl" />
       </div>
+
+      <OverlayScrollbar className="flex-1">
+        <div className="flex min-h-full flex-col items-center justify-center px-4 py-10">
 
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-8">
         {/* Hero */}
@@ -121,6 +125,8 @@ export default function HomePage() {
           </Button>
         </section>
       </div>
+        </div>
+      </OverlayScrollbar>
 
       {/* 功能開發中 popup */}
       <div
